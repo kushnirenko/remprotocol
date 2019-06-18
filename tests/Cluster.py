@@ -165,7 +165,7 @@ class Cluster(object):
         pfSetupPolicy: determine the protocol feature setup policy (none, preactivate_feature_only, or full)
         alternateVersionLabelsFile: Supply an alternate version labels file to use with associatedNodeLabels.
         associatedNodeLabels: Supply a dictionary of node numbers to use an alternate label for a specific node.
-        loadSystemContract: indicate whether the eosio.system contract should be loaded (setting this to False causes useBiosBootFile to be treated as False)
+        loadSystemContract: indicate whether the remme.system contract should be loaded (setting this to False causes useBiosBootFile to be treated as False)
         """
         assert(isinstance(topo, str))
         assert PFSetupPolicy.isValid(pfSetupPolicy)
@@ -953,7 +953,7 @@ class Cluster(object):
             "FEATURE_DIGESTS": ""
         }
         if PFSetupPolicy.hasPreactivateFeature(pfSetupPolicy):
-            env["BIOS_CONTRACT_PATH"] = "contracts/contracts/eosio.bios"
+            env["BIOS_CONTRACT_PATH"] = "contracts/contracts/remme.bios"
 
         if pfSetupPolicy == PFSetupPolicy.FULL:
             allBuiltinProtocolFeatureDigests = biosNode.getAllBuiltinFeatureDigestsToPreactivate()
@@ -1006,7 +1006,7 @@ class Cluster(object):
         initialFunds="1000000.0000 {0}".format(CORE_SYMBOL)
         Utils.Print("Transfer initial fund %s to individual accounts." % (initialFunds))
         trans=None
-        contract="eosio.token"
+        contract="remme.token"
         action="transfer"
         for name, keys in producerKeys.items():
             data="{\"from\":\"eosio\",\"to\":\"%s\",\"quantity\":\"%s\",\"memo\":\"%s\"}" % (name, initialFunds, "init eosio transfer")
@@ -1014,7 +1014,7 @@ class Cluster(object):
             if name != "eosio":
                 trans=biosNode.pushMessage(contract, action, data, opts)
                 if trans is None or not trans[0]:
-                    Utils.Print("ERROR: Failed to transfer funds from eosio.token to %s." % (name))
+                    Utils.Print("ERROR: Failed to transfer funds from remme.token to %s." % (name))
                     return None
 
             Node.validateTransaction(trans[1])
@@ -1043,7 +1043,7 @@ class Cluster(object):
     def setDefaultProducers(self, node, total_nodes, number_of_producers, producer_keys):
         if number_of_producers == -1:
             setProdsFile = "setprods.json"
-            if Utils.Debug: 
+            if Utils.Debug:
                 Utils.Print("Reading in setprods file %s." % (setProdsFile))
 
             with open(setProdsFile, "r") as f:
@@ -1070,7 +1070,7 @@ class Cluster(object):
             setProdsStr += ' ] }'
             if Utils.Debug:
                 Utils.Print("setprods: %s" % (setProdsStr))
-            
+
             Utils.Print("Setting producers: %s." % (", ".join(prodNames)))
             opts = "--permission eosio@active"
             # pylint: disable=redefined-variable-type
@@ -1078,7 +1078,7 @@ class Cluster(object):
             if trans is None or not trans[0]:
                 Utils.Print("ERROR: Failed to set producer %s." % (keys["name"]))
                 return None
-        
+
         trans   = trans[1]
         transId = Node.getTransId(trans)
         if not node.waitForTransInBlock(transId):
@@ -1136,7 +1136,7 @@ class Cluster(object):
             return None
 
         return True
-        
+
 
     def bootstrap(self, biosNode, totalNodes, prodCount, totalProducers, pfSetupPolicy, onlyBios=False, onlySetProds=False, loadSystemContract=True):
         """
@@ -1179,7 +1179,7 @@ class Cluster(object):
             Utils.Print("ERROR: Failed to import %s account keys into ignition wallet." % (eosioName))
             return None
 
-        contract = "eosio.bios"
+        contract = "remme.bios"
         old_version = not PFSetupPolicy.hasPreactivateFeature(pfSetupPolicy)
         trans = self.publishContract(biosNode, contract, eosioAccount.name, old_version)
         if trans is None:
@@ -1216,21 +1216,21 @@ class Cluster(object):
         if not onlyBios:
             self.setDefaultProducers(biosNode, totalNodes, prodCount, producerKeys)
 
-        if onlySetProds: 
+        if onlySetProds:
             return biosNode
 
         systemAccounts = [
             Account(
-                "eosio.token",  eosioAccount.ownerPrivateKey, eosioAccount.ownerPublicKey, eosioAccount.activePrivateKey, eosioAccount.activePublicKey
+                "remme.token",  eosioAccount.ownerPrivateKey, eosioAccount.ownerPublicKey, eosioAccount.activePrivateKey, eosioAccount.activePublicKey
             ),
             Account(
-                "eosio.ram",    eosioAccount.ownerPrivateKey, eosioAccount.ownerPublicKey, eosioAccount.activePrivateKey, eosioAccount.activePublicKey
+                "remme.ram",    eosioAccount.ownerPrivateKey, eosioAccount.ownerPublicKey, eosioAccount.activePrivateKey, eosioAccount.activePublicKey
             ),
             Account(
-                "eosio.ramfee", eosioAccount.ownerPrivateKey, eosioAccount.ownerPublicKey, eosioAccount.activePrivateKey, eosioAccount.activePublicKey
+                "remme.ramfee", eosioAccount.ownerPrivateKey, eosioAccount.ownerPublicKey, eosioAccount.activePrivateKey, eosioAccount.activePublicKey
             ),
             Account(
-                "eosio.stake",  eosioAccount.ownerPrivateKey, eosioAccount.ownerPublicKey, eosioAccount.activePrivateKey, eosioAccount.activePublicKey
+                "remme.stake",  eosioAccount.ownerPrivateKey, eosioAccount.ownerPublicKey, eosioAccount.activePrivateKey, eosioAccount.activePublicKey
             )
         ]
         trans = None
@@ -1247,8 +1247,8 @@ class Cluster(object):
             Utils.Print("ERROR: Failed to validate transaction %s got rolled into a block on server port %d." % (transId, biosNode.port))
             return None
 
-        tokenAccountName = "eosio.token"
-        contract = "eosio.token"
+        tokenAccountName = "remme.token"
+        contract = "remme.token"
         trans = self.publishContract(biosNode, contract, tokenAccountName)
         if trans is None:
             Utils.Print("ERROR: Failed to publish contract %s." % (contract))
@@ -1259,8 +1259,8 @@ class Cluster(object):
             Utils.Print("ERROR: Failed to issue tokens")
             return None
 
-        contract = "eosio.system"
-        trans = self.publishContract(biosNode, contract, eosioAccount.name)  
+        contract = "remme.system"
+        trans = self.publishContract(biosNode, contract, eosioAccount.name)
         if trans is None:
             Utils.Print("ERROR: Failed to publish contract %s." % (contract))
             return None
