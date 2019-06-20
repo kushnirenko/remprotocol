@@ -37,7 +37,7 @@ BOOST_AUTO_TEST_SUITE(ram_tests)
 /*************************************************************************************
  * ram_tests test case
  *************************************************************************************/
-   BOOST_FIXTURE_TEST_CASE(ram_tests, eosio_system::eosio_system_tester) {
+   BOOST_FIXTURE_TEST_CASE(ram_tests, remme_system::eosio_system_tester) {
       try {
 
          const uint64_t min_account_stake = get_global_state()["min_account_stake"].as<int64_t>();
@@ -46,6 +46,7 @@ BOOST_AUTO_TEST_SUITE(ram_tests)
          PRINT_USAGE(remme.stake)
 
          cross_15_percent_threshold();
+         produce_blocks(10);
 
          TESTER *tester = this;
          auto rlm = control->get_resource_limits_manager();

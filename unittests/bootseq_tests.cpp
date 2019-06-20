@@ -226,18 +226,18 @@ BOOST_FIXTURE_TEST_CASE( bootseq_test, bootseq_tester ) {
         // Create remme.msig and remme.token
         create_accounts({N(remme.msig), N(remme.token), N(remme.ram), N(remme.ramfee), N(remme.stake), N(remme.vpay), N(remme.spay), N(remme.saving) });
         // Set code for the following accounts:
-        //  - eosio (code: remme.bios) (already set by tester constructor)
+        //  - remme (code: remme.bios) (already set by tester constructor)
         //  - remme.msig (code: remme.msig)
         //  - remme.token (code: remme.token)
-        // set_code_abi(N(remme.msig), contracts::remme_msig_wasm(), contracts::remme_msig_abi().data());//, &eosio_active_pk);
-        // set_code_abi(N(remme.token), contracts::remme_token_wasm(), contracts::remme_token_abi().data()); //, &eosio_active_pk);
+        // set_code_abi(N(remme.msig), contracts::remme_msig_wasm(), contracts::remme_msig_abi().data());//, &remme_active_pk);
+        // set_code_abi(N(remme.token), contracts::remme_token_wasm(), contracts::remme_token_abi().data()); //, &remme_active_pk);
 
         set_code_abi(N(remme.msig),
                      contracts::remme_msig_wasm(),
-                     contracts::remme_msig_abi().data());//, &eosio_active_pk);
+                     contracts::remme_msig_abi().data());//, &remme_active_pk);
         set_code_abi(N(remme.token),
                      contracts::remme_token_wasm(),
-                     contracts::remme_token_abi().data()); //, &eosio_active_pk);
+                     contracts::remme_token_abi().data()); //, &remme_active_pk);
 
         // Set privileged for remme.msig and remme.token
         set_privileged(N(remme.msig));
@@ -250,7 +250,7 @@ BOOST_FIXTURE_TEST_CASE( bootseq_test, bootseq_tester ) {
         BOOST_TEST(remme_token_acc.is_privileged() == true);
 
 
-        // Create SYS tokens in remme.token, set its manager as eosio
+        // Create SYS tokens in remme.token, set its manager as remme
         auto max_supply = core_from_string("1000000000.0000");
         auto initial_supply = core_from_string("900000000.0000");
         create_currency(N(remme.token), config::system_account_name, max_supply);
@@ -271,7 +271,7 @@ BOOST_FIXTURE_TEST_CASE( bootseq_test, bootseq_tester ) {
         for( const auto& a : test_genesis ) {
            auto stake_quantity = a.initial_balance - 1000;
 
-           auto r = delegate_bandwidth(N(eosio.stake), a.aname, asset(stake_quantity));
+           auto r = delegate_bandwidth(N(remme.stake), a.aname, asset(stake_quantity));
            BOOST_REQUIRE( !r->except_ptr );
         }
 
@@ -318,7 +318,7 @@ BOOST_FIXTURE_TEST_CASE( bootseq_test, bootseq_tester ) {
         produce_blocks_for_n_rounds(2); // 2 rounds since new producer schedule is set when the first block of next round is irreversible
         auto active_schedule = control->head_block_state()->active_schedule;
         BOOST_TEST(active_schedule.producers.size() == 1u);
-        BOOST_TEST(active_schedule.producers.front().producer_name == "eosio");
+        BOOST_TEST(active_schedule.producers.front().producer_name == "remme");
 
         // Spend 1 day so we can use claimrewards
         produce_min_num_of_blocks_to_spend_time_wo_inactive_prod(fc::seconds(1 * 24 * 3600)); // 1 day
@@ -366,9 +366,9 @@ BOOST_FIXTURE_TEST_CASE( bootseq_test, bootseq_tester ) {
         torewards(config::system_account_name, config::system_account_name, core_from_string("20000.0000"));
         //Counters of expected_produced_blocks
         //prode - 8
-        const auto saving_balance = get_balance(N(eosio.saving)).get_amount();
-        const auto spay_balance = get_balance(N(eosio.spay)).get_amount();
-        const auto vpay_balance = get_balance(N(eosio.vpay)).get_amount();
+        const auto saving_balance = get_balance(N(remme.saving)).get_amount();
+        const auto spay_balance = get_balance(N(remme.spay)).get_amount();
+        const auto vpay_balance = get_balance(N(remme.vpay)).get_amount();
         BOOST_REQUIRE(saving_balance >= 2000'0000);
         BOOST_REQUIRE_EQUAL(spay_balance, 14000'0000);
         BOOST_REQUIRE(vpay_balance <= 4000'0000);
@@ -450,7 +450,7 @@ BOOST_FIXTURE_TEST_CASE( bootseq_test, bootseq_tester ) {
         BOOST_TEST(get_balance(N(runnerup1)).get_amount() == 0);
         BOOST_TEST(get_balance(N(proda)).get_amount() == 0);
         //runnerup should not get any pervote rewards because he wasn`t on schedule when torewards was called
-        BOOST_REQUIRE_EQUAL(get_balance(N(eosio.vpay)).get_amount(), vpay_balance);
+        BOOST_REQUIRE_EQUAL(get_balance(N(remme.vpay)).get_amount(), vpay_balance);
         claim_rewards(N(runnerup1));
         BOOST_TEST(get_balance(N(runnerup1)).get_amount() > 0);
         claim_rewards(N(proda));
@@ -483,32 +483,32 @@ BOOST_FIXTURE_TEST_CASE( bootseq_test, bootseq_tester ) {
 
 BOOST_FIXTURE_TEST_CASE( stake_lock_test, bootseq_tester ) {
     try{
-        // Create eosio.msig and eosio.token
-        create_accounts({N(eosio.msig), N(eosio.token), N(eosio.ram), N(eosio.ramfee), N(eosio.stake), N(eosio.vpay), N(eosio.bpay), N(eosio.saving) });
+        // Create remme.msig and remme.token
+        create_accounts({N(remme.msig), N(remme.token), N(remme.ram), N(remme.ramfee), N(remme.stake), N(remme.vpay), N(remme.bpay), N(remme.saving) });
 
-        set_code_abi(N(eosio.msig),
-                     contracts::eosio_msig_wasm(),
-                     contracts::eosio_msig_abi().data());//, &eosio_active_pk);
-        set_code_abi(N(eosio.token),
-                     contracts::eosio_token_wasm(),
-                     contracts::eosio_token_abi().data()); //, &eosio_active_pk);
+        set_code_abi(N(remme.msig),
+                     contracts::remme_msig_wasm(),
+                     contracts::remme_msig_abi().data());//, &remme_active_pk);
+        set_code_abi(N(remme.token),
+                     contracts::remme_token_wasm(),
+                     contracts::remme_token_abi().data()); //, &remme_active_pk);
 
-        // Set privileged for eosio.msig and eosio.token
-        set_privileged(N(eosio.msig));
-        set_privileged(N(eosio.token));
+        // Set privileged for remme.msig and remme.token
+        set_privileged(N(remme.msig));
+        set_privileged(N(remme.token));
 
-        // Verify eosio.msig and eosio.token is privileged
-        const auto& eosio_msig_acc = get<account_metadata_object, by_name>(N(eosio.msig));
-        BOOST_TEST(eosio_msig_acc.is_privileged() == true);
-        const auto& eosio_token_acc = get<account_metadata_object, by_name>(N(eosio.token));
-        BOOST_TEST(eosio_token_acc.is_privileged() == true);
+        // Verify remme.msig and remme.token is privileged
+        const auto& remme_msig_acc = get<account_metadata_object, by_name>(N(remme.msig));
+        BOOST_TEST(remme_msig_acc.is_privileged() == true);
+        const auto& remme_token_acc = get<account_metadata_object, by_name>(N(remme.token));
+        BOOST_TEST(remme_token_acc.is_privileged() == true);
 
-        // Create SYS tokens in eosio.token, set its manager as eosio
+        // Create SYS tokens in remme.token, set its manager as remme
         auto max_supply = core_from_string("100.0000");
         auto initial_supply = core_from_string("100.0000");
-        create_currency(N(eosio.token), config::system_account_name, max_supply);
-        // Issue the genesis supply of 1 billion SYS tokenbs to eosio.system
-        issue(N(eosio.token), config::system_account_name, config::system_account_name, initial_supply);
+        create_currency(N(remme.token), config::system_account_name, max_supply);
+        // Issue the genesis supply of 1 billion SYS tokenbs to remme.system
+        issue(N(remme.token), config::system_account_name, config::system_account_name, initial_supply);
 
         auto actual = get_balance(config::system_account_name);
         BOOST_REQUIRE_EQUAL(initial_supply, actual);
@@ -525,7 +525,7 @@ BOOST_FIXTURE_TEST_CASE( stake_lock_test, bootseq_tester ) {
             auto stake_quantity = a.initial_balance - 1000;
 
 
-            auto r = delegate_bandwidth(N(eosio.stake), a.aname, asset(stake_quantity));
+            auto r = delegate_bandwidth(N(remme.stake), a.aname, asset(stake_quantity));
             BOOST_REQUIRE( !r->except_ptr );
         }
 

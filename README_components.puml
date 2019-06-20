@@ -13,10 +13,10 @@ note left of [remnode]: nodeos
 note bottom of [remvault] : keosd
 [remvault] -> Wallets
 package "system contracts" {
-[remnode] --> [remme.msig] : wasm action calls
-[remnode] --> [remme.token]
-[remnode] --> [remme.system] : wasm action calls
-[remnode] --> [remme.wrap]
+[remnode] --> [rem.msig] : wasm action calls
+[remnode] --> [rem.token]
+[remnode] --> [rem.system] : wasm action calls
+[remnode] --> [rem.wrap]
 }
 }
 

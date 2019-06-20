@@ -304,7 +304,7 @@ namespace eosiosystem {
       EOSLIB_SERIALIZE( voter_info, (owner)(proxy)(producers)(staked)(last_vote_weight)(vote_mature_time)(proxied_vote_weight)(is_proxy)(flags1)(reserved2)(reserved3)(last_reassertion_time) )
    };
 
-   struct [[eosio::table, eosio::contract("eosio.system")]] user_resources {
+   struct [[eosio::table, eosio::contract("remme.system")]] user_resources {
       name          owner;
       asset         net_weight;
       asset         cpu_weight;
@@ -588,7 +588,7 @@ namespace eosiosystem {
           *
           * @param system_account - the system account to get the core symbol for.
           */
-         static symbol get_core_symbol( name system_account = "eosio"_n ) {
+         static symbol get_core_symbol( name system_account = "remme"_n ) {
             rammarket rm(system_account, system_account.value);
             const static auto sym = get_core_symbol( rm );
             return sym;
