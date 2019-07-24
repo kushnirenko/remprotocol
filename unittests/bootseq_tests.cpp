@@ -391,15 +391,15 @@ BOOST_FIXTURE_TEST_CASE( bootseq_test, bootseq_tester ) {
         //prodh-prodo - 48
         //prodp       - 57
         //prodq-produ - 60
-        for (auto prod: { N(proda), N(prodb), N(prodc), N(prodd), N(prode), N(prodf) }) {
+        for (auto prod: { N(proda), N(prodb), N(prodc) }) {
            BOOST_TEST(get_expected_produced_blocks(prod) == 60);
         }
-        BOOST_TEST(get_expected_produced_blocks(N(prodg)) == 49); //last producer in round
-        for (auto prod: { N(prodh), N(prodi), N(prodj), N(prodk), N(prodl), N(prodm), N(prodn), N(prodo) }) {
+        BOOST_TEST(get_expected_produced_blocks(N(prodd)) == 49); //last producer in round
+        for (auto prod: { N(prode), N(prodf), N(prodg), N(prodh), N(prodi), N(prodj), N(prodk), N(prodl) }) {
            BOOST_TEST(get_expected_produced_blocks(prod) == 48);
         }
-        BOOST_TEST(get_expected_produced_blocks(N(prodp)) == 57); //first producer in round
-        for (auto prod: { N(prodq), N(prodr), N(prods), N(prodt), N(produ) }) {
+        BOOST_TEST(get_expected_produced_blocks(N(prodm)) == 57); //first producer in round
+        for (auto prod: { N(prodn), N(prodo), N(prodp), N(prodq), N(prodr), N(prods), N(prodt), N(produ) }) {
            BOOST_TEST(get_expected_produced_blocks(prod) == 60);
         }
 
@@ -436,15 +436,13 @@ BOOST_FIXTURE_TEST_CASE( bootseq_test, bootseq_tester ) {
         produce_blocks_until_schedule_is_changed(2000);
         produce_blocks(2);
 
-        BOOST_TEST(get_expected_produced_blocks(N(prodp)) == 57); //wasn`t in second schedule, so expected_produced_blocks haven`t changed
-        for (auto prod: { N(proda), N(prodb), N(prodc) }) {
-           BOOST_TEST(get_expected_produced_blocks(prod) == 96);
-        }
-        BOOST_TEST(get_expected_produced_blocks(N(prodd)) == 85); //last producer in round
-        for (auto prod: { N(prode), N(prodf), N(prodg), N(prodh), N(prodi), N(prodj), N(prodk), N(prodl), N(prodm), N(prodn), N(prodo) }) {
+        BOOST_TEST(get_expected_produced_blocks(N(prodp)) == 60); //wasn`t in second schedule, so expected_produced_blocks haven`t changed
+        BOOST_TEST(get_expected_produced_blocks(N(proda)) == 85); //last producer in round
+        for (auto prod: { N(prodb), N(prodc), N(prodd), N(prode), N(prodf), N(prodg), N(prodh), N(prodi), N(prodj), N(prodk), N(prodl) }) {
            BOOST_TEST(get_expected_produced_blocks(prod) == 84);
         }
-        for (auto prod: { N(prodq), N(prodr), N(prods), N(prodt), N(produ) }) {
+        BOOST_TEST(get_expected_produced_blocks(N(prodm)) == 93);
+        for (auto prod: { N(prodn), N(prodo), N(prodq), N(prodr), N(prods), N(prodt), N(produ) }) {
            BOOST_TEST(get_expected_produced_blocks(prod) == 96);
         }
         BOOST_TEST(get_expected_produced_blocks(N(runnerup1)) == 36);
