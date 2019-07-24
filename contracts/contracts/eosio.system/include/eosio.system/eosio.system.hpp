@@ -147,6 +147,7 @@ namespace eosiosystem {
       int64_t              pervote_bucket = 0;
       int64_t              perblock_bucket = 0;
       uint32_t             total_unpaid_blocks = 0; /// all blocks which have been produced but not paid
+      int64_t              total_producer_stake = 0;
       int64_t              total_activated_stake = 0;
       time_point           thresh_activated_stake_time;
       uint16_t             last_producer_schedule_size = 0;
@@ -158,7 +159,8 @@ namespace eosiosystem {
                                 (max_ram_size)(min_account_stake)(total_ram_bytes_reserved)(total_ram_stake)
                                 (last_schedule)(last_schedule_version)(current_round_start_time)
                                 (last_producer_schedule_update)(last_pervote_bucket_fill)
-                                (perstake_bucket)(pervote_bucket)(perblock_bucket)(total_unpaid_blocks)(total_activated_stake)(thresh_activated_stake_time)
+                                (perstake_bucket)(pervote_bucket)(perblock_bucket)(total_unpaid_blocks)(total_producer_stake)
+                                (total_activated_stake)(thresh_activated_stake_time)
                                 (last_producer_schedule_size)(total_active_producer_vote_weight)(last_name_close) )
    };
 

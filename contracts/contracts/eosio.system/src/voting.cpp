@@ -72,6 +72,8 @@ namespace eosiosystem {
             info.owner                     = producer;
             info.last_votepay_share_update = ct;
          });
+         const auto &voter = _voters.get(producer.value);
+         _gstate.total_producer_stake += voter.staked;
       }
 
    }

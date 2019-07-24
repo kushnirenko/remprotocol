@@ -1071,6 +1071,9 @@ namespace eosiosystem {
             _voters.modify( vitr, same_payer, [&]( auto& vinfo ) {
                vinfo.staked += delta_stake;
             });
+            if (is_block_producer(voter)) {
+               _gstate.total_producer_stake += delta_stake;
+            }
          }
       }
    }

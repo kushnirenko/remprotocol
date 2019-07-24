@@ -218,7 +218,7 @@ namespace eosiosystem {
          for (auto it = _producers.begin(); it != _producers.end(); it++) {
             const auto &voter = _voters.get(it->owner.value);
             const auto producer_per_stake_pay = int64_t(
-               _gstate.perstake_bucket * (double(voter.staked) / double(_gstate.total_activated_stake)));
+               _gstate.perstake_bucket * (double(voter.staked) / double(_gstate.total_producer_stake)));
             _producers.modify(it, same_payer, [&](auto &p) {
                p.pending_perstake_reward += producer_per_stake_pay;
             });

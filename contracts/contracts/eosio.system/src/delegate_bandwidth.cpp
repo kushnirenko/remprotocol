@@ -265,6 +265,9 @@ namespace eosiosystem {
             }
          });
       }
+      if (is_block_producer(voter)) {
+         _gstate.total_producer_stake += total_update.amount;
+      }
 
       check( 0 <= voter_itr->staked, "stake for voting cannot be negative" );
 
