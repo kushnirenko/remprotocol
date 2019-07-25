@@ -135,7 +135,8 @@ namespace eosiosystem {
          check( 0 <= tot_itr->cpu_weight.amount, "insufficient staked total cpu bandwidth" );
          check( _gstate.min_account_stake <= tot_itr->own_stake_amount, "insufficient minimal account stake for " + receiver.to_string() );
 
-         if (is_block_producer(receiver)) {
+         auto prod = _producers.find( receiver.value );
+         if (prod != _producers.end() && prod->active() && from == receiver) {
             _gstate.total_producer_stake += stake_delta.amount;
          }
 

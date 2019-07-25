@@ -38,7 +38,13 @@ namespace eosiosystem {
       auto prod = _producers.find( producer.value );
       const auto ct = current_time_point();
 
+      user_resources_table totals_tbl( _self, producer.value );
+      const auto& tot = totals_tbl.get(producer.value, "producer must have resources");
       if ( prod != _producers.end() ) {
+         if (!prod->active()) {
+            _gstate.total_producer_stake += tot.own_stake_amount;
+         }
+
          _producers.modify( prod, producer, [&]( producer_info& info ){
             info.producer_key = producer_key;
             info.is_active    = true;
@@ -72,10 +78,7 @@ namespace eosiosystem {
             info.owner                     = producer;
             info.last_votepay_share_update = ct;
          });
-         user_resources_table   totals_tbl( _self, producer.value );
-         auto tot_itr = totals_tbl.find( producer.value );
-         check(tot_itr != totals_tbl.end(), "producer must have resources");
-         _gstate.total_producer_stake += tot_itr->own_stake_amount;
+         _gstate.total_producer_stake += tot.own_stake_amount;
       }
 
    }
@@ -84,6 +87,11 @@ namespace eosiosystem {
       require_auth( producer );
 
       const auto& prod = _producers.get( producer.value, "producer not found" );
+      if (prod.active()) {
+         user_resources_table totals_tbl( _self, producer.value );
+         const auto& tot = totals_tbl.get(producer.value, "producer must have resources");
+         _gstate.total_producer_stake -= tot.own_stake_amount;
+      }
       _producers.modify( prod, same_payer, [&]( producer_info& info ){
          info.deactivate();
       });
