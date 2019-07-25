@@ -72,8 +72,10 @@ namespace eosiosystem {
             info.owner                     = producer;
             info.last_votepay_share_update = ct;
          });
-         const auto &voter = _voters.get(producer.value);
-         _gstate.total_producer_stake += voter.staked;
+         user_resources_table   totals_tbl( _self, producer.value );
+         auto tot_itr = totals_tbl.find( producer.value );
+         check(tot_itr != totals_tbl.end(), "producer must have resources");
+         _gstate.total_producer_stake += tot_itr->own_stake_amount;
       }
 
    }

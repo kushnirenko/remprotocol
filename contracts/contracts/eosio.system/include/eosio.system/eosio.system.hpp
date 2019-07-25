@@ -294,6 +294,24 @@ namespace eosiosystem {
       EOSLIB_SERIALIZE( voter_info, (owner)(proxy)(producers)(staked)(last_vote_weight)(vote_mature_time)(proxied_vote_weight)(is_proxy)(flags1)(reserved2)(reserved3) )
    };
 
+   struct [[eosio::table, eosio::contract("eosio.system")]] user_resources {
+      name          owner;
+      asset         net_weight;
+      asset         cpu_weight;
+      int64_t       own_stake_amount = 0; //controlled by delegatebw and undelegatebw only
+
+      uint64_t primary_key()const { return owner.value; }
+
+      // explicit serialization macro is not necessary, used here only to improve compilation time
+      EOSLIB_SERIALIZE( user_resources, (owner)(net_weight)(cpu_weight)(own_stake_amount) )
+   };
+
+   /**
+    *  These table is designed to be constructed in the scope of the relevant user, this
+    *  facilitates simpler API for per-user queries
+    */
+   typedef eosio::multi_index< "userres"_n, user_resources >      user_resources_table;
+
    /**
     * Voters table
     *

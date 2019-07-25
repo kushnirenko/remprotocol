@@ -216,9 +216,11 @@ namespace eosiosystem {
       if (_gstate.perstake_bucket > 1'0000) { //do not distribute small amounts
          int64_t total_producer_per_stake_pay = 0;
          for (auto it = _producers.begin(); it != _producers.end(); it++) {
-            const auto &voter = _voters.get(it->owner.value);
+            user_resources_table   totals_tbl( _self, it->owner.value );
+            auto tot_itr = totals_tbl.find( it->owner.value );
+            check(tot_itr != totals_tbl.end(), "producer must have resources");
             const auto producer_per_stake_pay = int64_t(
-               _gstate.perstake_bucket * (double(voter.staked) / double(_gstate.total_producer_stake)));
+               _gstate.perstake_bucket * (double(tot_itr->own_stake_amount) / double(_gstate.total_producer_stake)));
             _producers.modify(it, same_payer, [&](auto &p) {
                p.pending_perstake_reward += producer_per_stake_pay;
             });
