@@ -238,6 +238,7 @@ namespace eosiosystem {
                if ( p.total_votes < 0 ) { // floating point arithmetics can give small negative numbers
                   p.total_votes = 0;
                }
+               _gstate.total_producer_vote_weight += pd.second.first;
             });
             const auto active_prod = std::find_if(std::begin(_gstate.last_schedule), std::end(_gstate.last_schedule),
                [target = pd.first](const auto& prod){ return prod.first.value == target.value; });
@@ -301,6 +302,7 @@ namespace eosiosystem {
                const double init_total_votes = prod.total_votes;
                _producers.modify( prod, same_payer, [&]( auto& p ) {
                   p.total_votes += delta;
+                  _gstate.total_producer_vote_weight += delta;
                });
                const auto active_prod = std::find_if(std::begin(_gstate.last_schedule), std::end(_gstate.last_schedule),
                   [&](const auto& prod){ return prod.first.value == acnt.value; });

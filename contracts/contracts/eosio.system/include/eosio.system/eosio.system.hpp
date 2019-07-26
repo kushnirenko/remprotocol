@@ -151,6 +151,7 @@ namespace eosiosystem {
       int64_t              total_activated_stake = 0;
       time_point           thresh_activated_stake_time;
       uint16_t             last_producer_schedule_size = 0;
+      double               total_producer_vote_weight = 0; /// the sum of all producer votes
       double               total_active_producer_vote_weight = 0; /// the sum of top 21 producer votes
       block_timestamp      last_name_close;
 
@@ -161,7 +162,7 @@ namespace eosiosystem {
                                 (last_producer_schedule_update)(last_pervote_bucket_fill)
                                 (perstake_bucket)(pervote_bucket)(perblock_bucket)(total_unpaid_blocks)(total_producer_stake)
                                 (total_activated_stake)(thresh_activated_stake_time)
-                                (last_producer_schedule_size)(total_active_producer_vote_weight)(last_name_close) )
+                                (last_producer_schedule_size)(total_producer_vote_weight)(total_active_producer_vote_weight)(last_name_close) )
    };
 
    /**
