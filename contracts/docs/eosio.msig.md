@@ -12,7 +12,7 @@ Prerequisites:
 
 One user creates a proposal:
 ````
-$ cleos multisig propose test '[{"actor": "treasury", "permission": "active"}]' '[{"actor": "treasury", "permission": "active"}]' rem.token issue '{"to": "tester", "quantity": "1000.0000 SYS", "memo": ""}' -p tester
+$ remcli multisig propose test '[{"actor": "treasury", "permission": "active"}]' '[{"actor": "treasury", "permission": "active"}]' rem.token issue '{"to": "tester", "quantity": "1000.0000 SYS", "memo": ""}' -p tester
 
 executed transaction: e26f3a3a7cba524a7b15a0b6c77c7daa73d3ba9bf84e83f9c2cdf27fcb183d61  336 bytes  107520 cycles
 #    rem.msig <= rem.msig::propose          {"proposer":"tester","proposal_name":"test","requested":[{"actor":"treasury","permission":"active"}]...
@@ -21,7 +21,7 @@ executed transaction: e26f3a3a7cba524a7b15a0b6c77c7daa73d3ba9bf84e83f9c2cdf27fcb
 
 Another user reviews the transaction:
 ````
-$ cleos multisig review tester test
+$ remcli multisig review tester test
 {
   "proposal_name": "test",
   "requested_approvals": [{
@@ -63,7 +63,7 @@ $ cleos multisig review tester test
 
 And then approves it:
 ````
-$ cleos multisig approve tester test '{"actor": "treasury", "permission": "active"}' -p treasury
+$ remcli multisig approve tester test '{"actor": "treasury", "permission": "active"}' -p treasury
 
 executed transaction: 475970a4b0016368d0503d1ce01577376f91f5a5ba63dd4353683bd95101b88d  256 bytes  108544 cycles
 #    rem.msig <= rem.msig::approve          {"proposer":"tester","proposal_name":"test","level":{"actor":"treasury","permission":"active"}}
@@ -72,7 +72,7 @@ executed transaction: 475970a4b0016368d0503d1ce01577376f91f5a5ba63dd4353683bd951
 
 First user initiates execution:
 ````
-$ cleos multisig exec tester test -p tester
+$ remcli multisig exec tester test -p tester
 
 executed transaction: 64e5eaceb77362694055f572ae35876111e87b637a55250de315b1b55e56d6c2  248 bytes  109568 cycles
 #    rem.msig <= rem.msig::exec             {"proposer":"tester","proposal_name":"test","executer":"tester"}
@@ -90,7 +90,7 @@ Prerequisites:
 
 One user creates a proposal:
 ````
-$ cleos multisig propose test '[{"actor": "treasury", "permission": "active"}]' '[{"actor": "treasury", "permission": "active"}]' rem.token transfer '{"from": "treasury", "to": "tester", "quantity": "1.0000 SYS", "memo": ""}' -p tester
+$ remcli multisig propose test '[{"actor": "treasury", "permission": "active"}]' '[{"actor": "treasury", "permission": "active"}]' rem.token transfer '{"from": "treasury", "to": "tester", "quantity": "1.0000 SYS", "memo": ""}' -p tester
 
 executed transaction: e26f3a3a7cba524a7b15a0b6c77c7daa73d3ba9bf84e83f9c2cdf27fcb183d61  336 bytes  107520 cycles
 #    rem.msig <= rem.msig::propose          {"proposer":"tester","proposal_name":"test","requested":[{"actor":"treasury","permission":"active"}]...
@@ -99,7 +99,7 @@ executed transaction: e26f3a3a7cba524a7b15a0b6c77c7daa73d3ba9bf84e83f9c2cdf27fcb
 
 Another user reviews the transaction:
 ````
-$ cleos multisig review tester test
+$ remcli multisig review tester test
 {
   "proposal_name": "test",
   "requested_approvals": [{
@@ -142,7 +142,7 @@ $ cleos multisig review tester test
 
 And then approves it:
 ````
-$ cleos multisig approve tester test '{"actor": "treasury", "permission": "active"}' -p treasury
+$ remcli multisig approve tester test '{"actor": "treasury", "permission": "active"}' -p treasury
 
 executed transaction: 475970a4b0016368d0503d1ce01577376f91f5a5ba63dd4353683bd95101b88d  256 bytes  108544 cycles
 #    rem.msig <= rem.msig::approve          {"proposer":"tester","proposal_name":"test","level":{"actor":"treasury","permission":"active"}}
@@ -151,7 +151,7 @@ executed transaction: 475970a4b0016368d0503d1ce01577376f91f5a5ba63dd4353683bd951
 
 First user check account balance before executing the proposed transaction
 ````
-$ cleos get account tester
+$ remcli get account tester
 ...
 SYS balances: 
      liquid:            1.0487 SYS
@@ -163,7 +163,7 @@ SYS balances:
 
 First user initiates execution of proposed transaction:
 ````
-$ cleos multisig exec tester test -p tester
+$ remcli multisig exec tester test -p tester
 
 executed transaction: 64e5eaceb77362694055f572ae35876111e87b637a55250de315b1b55e56d6c2  248 bytes  109568 cycles
 #    rem.msig <= rem.msig::exec             {"proposer":"tester","proposal_name":"test","executer":"tester"}
@@ -172,7 +172,7 @@ executed transaction: 64e5eaceb77362694055f572ae35876111e87b637a55250de315b1b55e
 
 First user can check account balance, it should be increased by 1.0000 SYS
 ````
-$ cleos get account tester
+$ remcli get account tester
 ...
 SYS balances: 
      liquid:            2.0487 SYS
