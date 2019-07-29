@@ -170,7 +170,7 @@ try:
                        Print("Failed to push create action to eosio contract for %d consecutive times, looks like nodeos already exited." % (timeOutCount))
                        keepProcessing=False
                        break
-                    Print("Failed to push create action to eosio contract. sleep for 60 seconds")
+                    Print("Failed to push create action to rem contract. sleep for 60 seconds")
                     time.sleep(60)
                 else:
                     timeOutCount=0
