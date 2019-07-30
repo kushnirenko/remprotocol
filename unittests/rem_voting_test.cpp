@@ -177,6 +177,17 @@ public:
        produce_blocks();
     };
 
+   auto unregister_producer(name producer) {
+       auto r = base_tester::push_action(config::system_account_name, N(unregprod), producer, mvo()
+               ("producer",  name(producer))
+               ("producer_key", get_public_key( producer, "active" ) )
+               ("url", "" )
+               ("location", 0 )
+       );
+       produce_block();
+       return r;
+   }
+
     abi_serializer abi_ser;
 };
 
@@ -654,6 +665,89 @@ BOOST_FIXTURE_TEST_CASE( rem_vote_weight_test, voting_tester ) {
          BOOST_TEST_REQUIRE( 10363317352113.912 == prod["total_votes"].as_double() );
       }
    } FC_LOG_AND_RETHROW()
+}
+
+BOOST_FIXTURE_TEST_CASE( resignation_test_case, voting_tester ) {
+    try {
+        // Create eosio.msig and eosio.token
+        create_accounts({N(eosio.msig), N(eosio.token), N(eosio.ram), N(eosio.ramfee), N(eosio.stake), N(eosio.vpay), N(eosio.bpay), N(eosio.saving) });
+
+        set_code_abi(N(eosio.msig),
+                     contracts::eosio_msig_wasm(),
+                     contracts::eosio_msig_abi().data());//, &eosio_active_pk);
+        set_code_abi(N(eosio.token),
+                     contracts::eosio_token_wasm(),
+                     contracts::eosio_token_abi().data()); //, &eosio_active_pk);
+
+        // Set privileged for eosio.msig and eosio.token
+        set_privileged(N(eosio.msig));
+        set_privileged(N(eosio.token));
+
+        // Verify eosio.msig and eosio.token is privileged
+        const auto& eosio_msig_acc = get<account_metadata_object, by_name>(N(eosio.msig));
+        BOOST_TEST(eosio_msig_acc.is_privileged() == true);
+        const auto& eosio_token_acc = get<account_metadata_object, by_name>(N(eosio.token));
+        BOOST_TEST(eosio_token_acc.is_privileged() == true);
+
+        // Create SYS tokens in eosio.token, set its manager as eosio
+        auto max_supply = core_from_string("1000000000.0000");
+        auto initial_supply = core_from_string("900000000.0000");
+        create_currency(N(eosio.token), config::system_account_name, max_supply);
+        // Issue the genesis supply of 1 billion SYS tokenbs to eosio.system
+        issue(N(eosio.token), config::system_account_name, config::system_account_name, initial_supply);
+
+        auto actual = get_balance(config::system_account_name);
+        BOOST_REQUIRE_EQUAL(initial_supply, actual);
+
+        // Create genesis accounts
+        for( const auto& a : rem_test_genesis ) {
+            create_account( a.name, config::system_account_name );
+        }
+        deploy_contract();
+
+        // Buy ram and stake cpu and net for each genesis accounts
+        for( const auto& acc : rem_test_genesis ) {
+            auto stake_quantity = acc.initial_balance - 1000;
+
+
+            auto r = delegate_bandwidth(N(eosio.stake), acc.name, asset(stake_quantity));
+            BOOST_REQUIRE( !r->except_ptr );
+        }
+
+        const auto whales_as_producers = { N(b1), N(whale1), N(whale3), N(whale2) };
+        for( const auto& producer : whales_as_producers ) {
+            register_producer(producer);
+        }
+
+        register_producer( N(proda));
+
+        // Vote for producers
+        auto votepro = [&]( account_name voter, vector<account_name> producers ) {
+            std::sort( producers.begin(), producers.end() );
+            base_tester::push_action(config::system_account_name, N(voteproducer), voter, mvo()
+                    ("voter",  name(voter))
+                    ("proxy", name(0) )
+                    ("producers", producers)
+            );
+        };
+
+        votepro( N(b1), { N(proda)} );
+        votepro( N(whale1), {N(proda)} );
+        votepro( N(whale2), {N(proda)} );
+        votepro( N(whale3), {N(proda)} );
+
+        // Spend some time so the producer pay pool is filled by the inflation rate
+        produce_min_num_of_blocks_to_spend_time_wo_inactive_prod(fc::seconds(30 * 24 * 3600)); // 30 days
+
+        const auto balance_before_unreg = get_balance(N(proda)).get_amount();
+
+        unregister_producer( N(proda) );
+        BOOST_TEST( balance_before_unreg < get_balance(N(proda)).get_amount() );
+
+        const auto prod = get_producer_info( "proda" );
+        BOOST_TEST( 0 == prod["unpaid_blocks"].as_int64() );
+
+    } FC_LOG_AND_RETHROW()
 }
 
 BOOST_AUTO_TEST_SUITE_END()
