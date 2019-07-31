@@ -669,32 +669,37 @@ BOOST_FIXTURE_TEST_CASE( rem_vote_weight_test, voting_tester ) {
 
 BOOST_FIXTURE_TEST_CASE( resignation_test_case, voting_tester ) {
     try {
-        // Create eosio.msig and eosio.token
-        create_accounts({N(eosio.msig), N(eosio.token), N(eosio.ram), N(eosio.ramfee), N(eosio.stake), N(eosio.vpay), N(eosio.bpay), N(eosio.saving) });
+        // Create rem.msig and rem.token
+        create_accounts({N(rem.msig), N(rem.token), N(rem.ram), N(rem.ramfee), N(rem.stake), N(rem.vpay), N(rem.bpay), N(rem.saving) });
 
-        set_code_abi(N(eosio.msig),
-                     contracts::eosio_msig_wasm(),
-                     contracts::eosio_msig_abi().data());//, &eosio_active_pk);
-        set_code_abi(N(eosio.token),
-                     contracts::eosio_token_wasm(),
-                     contracts::eosio_token_abi().data()); //, &eosio_active_pk);
+        // Set code for the following accounts:
+        //  - rem (code: rem.bios) (already set by tester constructor)
+        //  - rem.msig (code: rem.msig)
+        //  - rem.token (code: rem.token)
+        set_code_abi(N(rem.msig),
+                     contracts::rem_msig_wasm(),
+                     contracts::rem_msig_abi().data());//, &rem_active_pk);
+        set_code_abi(N(rem.token),
+                     contracts::rem_token_wasm(),
+                     contracts::rem_token_abi().data()); //, &rem_active_pk);
 
-        // Set privileged for eosio.msig and eosio.token
-        set_privileged(N(eosio.msig));
-        set_privileged(N(eosio.token));
+        // Set privileged for rem.msig and rem.token
+        set_privileged(N(rem.msig));
+        set_privileged(N(rem.token));
 
-        // Verify eosio.msig and eosio.token is privileged
-        const auto& eosio_msig_acc = get<account_metadata_object, by_name>(N(eosio.msig));
-        BOOST_TEST(eosio_msig_acc.is_privileged() == true);
-        const auto& eosio_token_acc = get<account_metadata_object, by_name>(N(eosio.token));
-        BOOST_TEST(eosio_token_acc.is_privileged() == true);
+        // Verify rem.msig and rem.token is privileged
+        const auto& rem_msig_acc = get<account_metadata_object, by_name>(N(rem.msig));
+        BOOST_TEST(rem_msig_acc.is_privileged() == true);
+        const auto& rem_token_acc = get<account_metadata_object, by_name>(N(rem.token));
+        BOOST_TEST(rem_token_acc.is_privileged() == true);
 
-        // Create SYS tokens in eosio.token, set its manager as eosio
-        auto max_supply = core_from_string("1000000000.0000");
-        auto initial_supply = core_from_string("900000000.0000");
-        create_currency(N(eosio.token), config::system_account_name, max_supply);
-        // Issue the genesis supply of 1 billion SYS tokenbs to eosio.system
-        issue(N(eosio.token), config::system_account_name, config::system_account_name, initial_supply);
+        // Create SYS tokens in rem.token, set its manager as rem
+        const auto max_supply     = core_from_string("1000000000.0000"); /// 10x larger than 1B initial tokens
+        const auto initial_supply = core_from_string("100000000.0000");  /// 10x larger than 1B initial tokens
+
+        create_currency(N(rem.token), config::system_account_name, max_supply);
+        // Issue the genesis supply of 1 billion SYS tokens to rem.system
+        issue(N(rem.token), config::system_account_name, config::system_account_name, initial_supply);
 
         auto actual = get_balance(config::system_account_name);
         BOOST_REQUIRE_EQUAL(initial_supply, actual);
@@ -703,46 +708,32 @@ BOOST_FIXTURE_TEST_CASE( resignation_test_case, voting_tester ) {
         for( const auto& a : rem_test_genesis ) {
             create_account( a.name, config::system_account_name );
         }
+
         deploy_contract();
 
         // Buy ram and stake cpu and net for each genesis accounts
         for( const auto& acc : rem_test_genesis ) {
             auto stake_quantity = acc.initial_balance - 1000;
-
-
-            auto r = delegate_bandwidth(N(eosio.stake), acc.name, asset(stake_quantity));
+            
+            auto r = delegate_bandwidth(N(rem.stake), acc.name, asset(stake_quantity));
             BOOST_REQUIRE( !r->except_ptr );
         }
 
-        const auto whales_as_producers = { N(b1), N(whale1), N(whale3), N(whale2) };
-        for( const auto& producer : whales_as_producers ) {
+        const auto producers = { N(b1), N(proda), N(whale1), N(whale2), N(whale3) };
+        for( const auto& producer : producers ) {
             register_producer(producer);
         }
 
-        register_producer( N(proda));
+        for( const auto& producer : producers ) {
+            votepro( producer, { N(proda) } );
+        }
 
-        // Vote for producers
-        auto votepro = [&]( account_name voter, vector<account_name> producers ) {
-            std::sort( producers.begin(), producers.end() );
-            base_tester::push_action(config::system_account_name, N(voteproducer), voter, mvo()
-                    ("voter",  name(voter))
-                    ("proxy", name(0) )
-                    ("producers", producers)
-            );
-        };
-
-        votepro( N(b1), { N(proda)} );
-        votepro( N(whale1), {N(proda)} );
-        votepro( N(whale2), {N(proda)} );
-        votepro( N(whale3), {N(proda)} );
-
-        // Spend some time so the producer pay pool is filled by the inflation rate
         produce_min_num_of_blocks_to_spend_time_wo_inactive_prod(fc::seconds(30 * 24 * 3600)); // 30 days
 
         const auto balance_before_unreg = get_balance(N(proda)).get_amount();
 
         unregister_producer( N(proda) );
-        BOOST_TEST( balance_before_unreg < get_balance(N(proda)).get_amount() );
+        BOOST_TEST( balance_before_unreg <= get_balance(N(proda)).get_amount() );
 
         const auto prod = get_producer_info( "proda" );
         BOOST_TEST( 0 == prod["unpaid_blocks"].as_int64() );
