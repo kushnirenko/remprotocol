@@ -5,6 +5,11 @@ target_include_directories(rem.system
    ${CMAKE_CURRENT_SOURCE_DIR}/include
    ${CMAKE_CURRENT_SOURCE_DIR}/../rem.token/include)
 
+target_include_directories(rem.system
+   PUBLIC
+   ${CMAKE_CURRENT_SOURCE_DIR}/include
+   ${CMAKE_CURRENT_SOURCE_DIR}/../rem.swap/include)
+
 set_target_properties(rem.system
    PROPERTIES
    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
