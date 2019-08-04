@@ -31,7 +31,7 @@ namespace eosio {
      * rem.swap contract
      *
      * @details rem.swap contract defines the structures and actions that allow users to init token swap,
-     * finish token swap, create new account, init token swap to ERC20 - for REM tokens.
+     * finish token swap, create new account and cancel token swap.
      * @{
      */
     class [[eosio::contract("rem.swap")]] swap : public contract {
@@ -41,12 +41,12 @@ namespace eosio {
         /**
          * Init swap action.
          *
-         * @details Initiate token swap with ERC20 REM ( ERC20 - > Remchain ).
+         * @details Initiate token swap.
          *
-         * @param user - the owner account to execute the init action for.
-         * @param swap_key - the public key created for the token swap.
-         * @param trx_id - the transaction transfer id in Ethereum blockchain.
-         * @param quantity - the quantity of tokens in the transfer transaction.
+         * @param user - the owner account to execute the init action for,
+         * @param swap_key - the public key created for the token swap,
+         * @param trx_id - the transaction transfer id in Ethereum blockchain,
+         * @param quantity - the quantity of tokens in the transfer transaction,
          * @param swap_init_time - the timestamp transfer transaction in Ethereum blockchain.
          */
         [[eosio::action]]
@@ -64,20 +64,20 @@ namespace eosio {
         /**
          * Cancel token swap.
          *
-         * @details Cancel already init token swap.
+         * @details Cancel already initialized token swap.
          *
-         * @param user - the owner account to execute the finish action for,
-         * @param swap_id - hash of swap data (swap_key, trx_id, chain_id, eth_address,
-         * quantity, swap_init_time).
+         * @param user - the owner account to execute the cancel action for,
+         * @param swap_id - hash of swap data ( swap_key, trx_id, chain_id, eth_address,
+         * quantity, swap_init_time ).
          */
         [[eosio::action]]
         void cancel( const name& user, const checksum256& swap_id );
 
 
         /**
-         * Finish token swap with ERC20 REM.
+         * Finish token swap.
          *
-         * @details Finish already approved token swap ( from ERC20 - > Remchain ).
+         * @details Finish already approved token swap.
          *
          * @param user - the owner account to execute the finish action for,
          * @param receiver - the account to be swap finished to,
@@ -93,14 +93,14 @@ namespace eosio {
 
 
         /**
-         * Finish token swap with ERC20 REM.
+         * Finish token swap.
          *
-         * @details Finish already approved token swap ( from ERC20 - > Remchain ).
+         * @details Finish already approved token swap and create new account.
          *
          * @param user - the owner account to execute the finish action for,
          * @param receiver - the account to be swap finished to,
          * @param trx_id - the transaction transfer id in Ethereum blockchain,
-         * @param quantity - the quantity of tokens to be swaped,
+         * @param quantity - the quantity of tokens to be swapped,
          * @param sign - the signature that sign by swap-key with data : name receiver account,
          * owner_key, public_key,
          * @param swap_init_time - the timestamp transfer transaction in Ethereum blockchain,
@@ -119,13 +119,14 @@ namespace eosio {
 
         using init_swap_action = eosio::action_wrapper<"init"_n, &swap::init>;
         using finish_swap_action = eosio::action_wrapper<"finish"_n, &swap::finish>;
-        using finish_swap_and_create_acc_action = eosio::action_wrapper<"finishwithacc"_n, &swap::finish>;
+        using finish_swap_and_create_acc_action = eosio::action_wrapper<"finishnewacc"_n, &swap::finishnewacc>;
+        using cancel_swap_action = eosio::action_wrapper<"cancel"_n, &swap::cancel>;
 
     private:
         enum class swap_status: uint8_t {
-            INIT = 0,
-            CANCEL = 1,
-            FINISH = 2
+            INITIALIZED = 0,
+            CANCELED = 1,
+            FINISHED = 2
         };
 
         static constexpr symbol core_symbol{"REM", 4};
@@ -158,17 +159,6 @@ namespace eosio {
 
 	   	 	EOSLIB_SERIALIZE( swap_data, (key)(trx_id)(swap_hash)(swap_init_time)
 	   	 	                             (status)(provided_approvals) )
-        };
-
-        struct [[eosio::table]] swap_to_erc20 {
-            uint64_t   key;
-            name       user;
-            string     eth_address;
-            time_point swap_init_time;
-            asset      amount;
-
-            uint64_t primary_key()const { return key; }
-            uint64_t by_name()const { return user.value; }
         };
 
         struct permission_level_weight {
@@ -204,10 +194,6 @@ namespace eosio {
                 const_mem_fun< swap_data, checksum256, &swap_data::by_swap_hash >>
                 > swap_index;
 
-        typedef multi_index<"swapstoerc"_n, swap_to_erc20, indexed_by<"byname"_n,
-                const_mem_fun< swap_to_erc20, uint64_t, &swap_to_erc20::by_name >>
-                > erc20_swap_index;
-
         bool is_block_producer( const name& user ) {
             std::vector<name> _producers = get_active_producers();
             return std::find(_producers.begin(), _producers.end(), user) != _producers.end();
@@ -220,7 +206,7 @@ namespace eosio {
             return sha256(const_cast<char*>(str.c_str()), str.size());
         }
 
-        void clearnup_expired_swaps();
+        void cleanup_expired_swaps();
 
         void create_user( const name& user, public_key owner_key, public_key active_key );
 

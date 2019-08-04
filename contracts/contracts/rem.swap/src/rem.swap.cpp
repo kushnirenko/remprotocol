@@ -32,14 +32,14 @@ namespace eosio {
         auto level = permission_level( user, "active"_n );
 
         check( time_point_sec(current_time_point()) < swap_init_timepoint + swap_lifetime, "swap lifetime expired" );
-        clearnup_expired_swaps();
+        cleanup_expired_swaps();
         if ( swap_hash_itr == swap_hash_idx.end() ) {
             swap_table.emplace(user, [&]( auto& s ) {
                 s.key = swap_table.available_primary_key();
                 s.trx_id = trx_id;
                 s.swap_hash = swap_hash;
                 s.swap_init_time = swap_init_timepoint;
-                s.status = static_cast<uint8_t>(swap_status::INIT);
+                s.status = static_cast<uint8_t>(swap_status::INITIALIZED);
             });
 
 //            if ( is_block_producer(user) ) {
@@ -50,8 +50,8 @@ namespace eosio {
         }
         else {
 //        check( is_block_producer(user), "authorization error" );
-            check( swap_hash_itr->status != static_cast<uint8_t>(swap_status::CANCEL), "swap already canceled" );
-            check( swap_hash_itr->status != static_cast<uint8_t>(swap_status::FINISH), "swap already finished" );
+            check( swap_hash_itr->status != static_cast<uint8_t>(swap_status::CANCELED), "swap already canceled" );
+            check( swap_hash_itr->status != static_cast<uint8_t>(swap_status::FINISHED), "swap already finished" );
 
             const std::vector<approval>& approvals = swap_hash_itr->provided_approvals;
             bool is_already_approval = std::find_if( approvals.begin(),
@@ -94,7 +94,7 @@ namespace eosio {
 
         _transfer( receiver, quantity );
         swap_table.modify( *swap_itr, user, [&]( auto& s ) {
-            s.status = static_cast<uint8_t>(swap_status::FINISH);
+            s.status = static_cast<uint8_t>(swap_status::FINISHED);
         });
 
     }
@@ -118,7 +118,7 @@ namespace eosio {
 
         _transfer( receiver, quantity );
         swap_table.modify( *swap_itr, user, [&]( auto& s ) {
-            s.status = static_cast<uint8_t>(swap_status::FINISH);
+            s.status = static_cast<uint8_t>(swap_status::FINISHED);
         });
     }
 
@@ -130,8 +130,8 @@ namespace eosio {
         const auto swap_hash_itr = swap_hash_idx.find( swap_id );
 
         check( swap_hash_itr != swap_hash_idx.end(), "swap doesn't exist" );
-        check( swap_hash_itr->status != static_cast<uint8_t>(swap_status::CANCEL), "swap already canceled" );
-        check( swap_hash_itr->status != static_cast<uint8_t>(swap_status::FINISH), "swap already finished" );
+        check( swap_hash_itr->status != static_cast<uint8_t>(swap_status::CANCELED), "swap already canceled" );
+        check( swap_hash_itr->status != static_cast<uint8_t>(swap_status::FINISHED), "swap already finished" );
         check( time_point_sec(current_time_point()) < swap_hash_itr->swap_init_time + swap_lifetime,
                "swap lifetime expired" );
         check( time_point_sec(current_time_point()) > swap_hash_itr->swap_init_time + swap_active_lifetime,
@@ -140,7 +140,7 @@ namespace eosio {
         require_recipient( user );
 
         swap_table.modify( *swap_hash_itr, user, [&]( auto& s ) {
-            s.status = static_cast<uint8_t>(swap_status::CANCEL);
+            s.status = static_cast<uint8_t>(swap_status::CANCELED);
         });
     }
 
@@ -174,8 +174,8 @@ namespace eosio {
         const auto swap_hash_itr = swap_hash_idx.find( swap_hash );
 
         check( swap_hash_itr != swap_hash_idx.end(), "swap doesn't exist" );
-        check( swap_hash_itr->status != static_cast<uint8_t>(swap_status::CANCEL), "swap already canceled" );
-        check( swap_hash_itr->status != static_cast<uint8_t>(swap_status::FINISH), "swap already finished" );
+        check( swap_hash_itr->status != static_cast<uint8_t>(swap_status::CANCELED), "swap already canceled" );
+        check( swap_hash_itr->status != static_cast<uint8_t>(swap_status::FINISHED), "swap already finished" );
         check( time_point_sec(current_time_point()) < swap_hash_itr->swap_init_time + swap_lifetime,
                "swap lifetime expired" );
         check( time_point_sec(current_time_point()) < swap_hash_itr->swap_init_time + swap_active_lifetime,
@@ -185,7 +185,7 @@ namespace eosio {
         return swap_hash;
     }
 
-    void swap::clearnup_expired_swaps() {
+    void swap::cleanup_expired_swaps() {
         swap_index swap_table( _self, get_first_receiver().value );
 
         for ( auto _table_itr = swap_table.begin(); _table_itr != swap_table.end();) {
