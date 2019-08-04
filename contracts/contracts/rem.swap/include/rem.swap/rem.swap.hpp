@@ -50,8 +50,8 @@ namespace eosio {
          * @param swap_init_time - the timestamp transfer transaction in Ethereum blockchain.
          */
         [[eosio::action]]
-        void init( const name& user, public_key swap_key, const string& trx_id,
-                   asset& quantity, const time_point& swap_init_time );
+        void init( const name& user, const public_key& swap_key, const string& trx_id,
+                   const asset& quantity, const uint32_t& swap_init_time );
 
         /**
          *  Debug action.
@@ -74,7 +74,7 @@ namespace eosio {
          */
         [[eosio::action]]
         void finish( const name& user, const name& receiver, const string& trx_id,
-                     asset& quantity, const signature& sign, const time_point& swap_init_time );
+                     asset& quantity, const signature& sign, const uint32_t& swap_init_time );
 
 
         /**
@@ -94,8 +94,8 @@ namespace eosio {
          */
         [[eosio::action]]
         void finishnewacc( const name& user, const name& receiver, const string& trx_id,
-                            asset& quantity, const signature& sign, const time_point& swap_init_time,
-                            const public_key owner_key, const public_key active_key                   );
+                           asset& quantity, const signature& sign, const uint32_t& swap_init_time,
+                           const public_key owner_key, const public_key active_key                   );
 
 
         [[eosio::on_notify("eosio.token::transfer")]]
@@ -111,7 +111,7 @@ namespace eosio {
             FINISH = 1
         };
 
-        const asset create_account_fee = {20, symbol("REM", 4)};
+        const asset create_account_fee = {200000, symbol("REM", 4)};
         const string remchain_id = "cf057bbfb72640471fd910bcb67639c22df9f92470936cddc1ade0e2f2e7dc4f";
         const time_point swap_lifetime = time_point(seconds(15552000)); // 180 days
 
@@ -125,7 +125,6 @@ namespace eosio {
             string                  trx_id;
             checksum256             swap_hash;
             time_point              swap_init_time;
-            uint32_t                timepoint;
             uint8_t                 status;
 
             std::vector<approval>   provided_approvals;
@@ -133,8 +132,8 @@ namespace eosio {
             uint64_t primary_key()const { return key; }
             checksum256 by_swap_hash()const { return swap_hash; }
 
-	   	 	EOSLIB_SERIALIZE( swap_data, (key)(trx_id)(swap_hash)(swap_init_time)
-	   	 	                             (timepoint)(status)(provided_approvals) )
+//	   	 	EOSLIB_SERIALIZE( swap_data, (key)(trx_id)(swap_hash)(swap_init_time)
+//	   	 	                             (timepoint)(status)(provided_approvals) )
         };
 
         struct [[eosio::table]] swap_to_erc20 {
@@ -200,11 +199,8 @@ namespace eosio {
 
         void _transfer( const name& receiver, const asset& quantity );
         checksum256 _get_swap_id( const name& user, const name& receiver, const string& trx_id,
-                                  asset& quantity, const signature& sign, const time_point& swap_init_time,
+                                  asset& quantity, const signature& sign, const uint32_t& swap_init_time,
                                   const public_key  owner_key                                               );
-
-        template<typename CharT>
-        static string to_hex( const CharT* d, uint32_t s );
     };
     /** @}*/ // end of @defgroup remswap rem.swap
 } /// namespace eosio
