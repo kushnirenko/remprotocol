@@ -6,15 +6,13 @@
 
 namespace eosio {
 
-    void swap::init( const name& user, const public_key& swap_key, const string& trx_id,
-                     const string& chain_id, const string eth_address, const asset& quantity,
-                     const uint32_t& swap_init_time ) {
+    void swap::init( const name& user, const public_key& swap_key, const checksum256& trx_id,
+                     const string& eth_address, const asset& quantity, const uint32_t& swap_init_time ) {
 
         require_auth( user );
         swap_index swap_table( _self, get_first_receiver().value );
 
         check( quantity.is_valid(), "invalid quantity" );
-        check( chain_id == remchain_id, "not correct chainID" );
         check( quantity.symbol == create_account_fee.symbol, "symbol precision mismatch" );
         check( quantity.amount > create_account_fee.amount, "the quantity must be greater "
                                                             "than the account creation fee" );
@@ -22,7 +20,7 @@ namespace eosio {
         const time_point swap_init_timepoint = time_point(seconds(swap_init_time));
 
         std::vector<char> swap_payload( swap_key.data.begin(), swap_key.data.end() );
-        string payload_str = trx_id + chain_id + eth_address + quantity.to_string()
+        string payload_str = sha256_to_hex( trx_id ) + remchain_id + eth_address + quantity.to_string()
                              + std::to_string( swap_init_timepoint.sec_since_epoch() );
         std::copy( payload_str.begin(), payload_str.end(), back_inserter(swap_payload));
 
@@ -33,6 +31,8 @@ namespace eosio {
 
         check( time_point_sec(current_time_point()) < swap_init_timepoint + swap_lifetime, "swap lifetime expired" );
         cleanup_expired_swaps();
+
+        const bool is_bp = is_block_producer(user);
         if ( swap_hash_itr == swap_hash_idx.end() ) {
             swap_table.emplace(user, [&]( auto& s ) {
                 s.key = swap_table.available_primary_key();
@@ -42,25 +42,24 @@ namespace eosio {
                 s.status = static_cast<uint8_t>(swap_status::INITIALIZED);
             });
 
-//            if ( is_block_producer(user) ) {
+//            if ( is_bp ) {
 //                swap_table.modify( *swap_hash_itr, user, [&]( auto& s ) {
 //                    s.provided_approvals.push_back( approval{ level, current_time_point() } );
 //                });
 //            }
         }
         else {
-//        check( is_block_producer(user), "authorization error" );
+//        check( is_bp, "authorization error" );
             check( swap_hash_itr->status != static_cast<uint8_t>(swap_status::CANCELED), "swap already canceled" );
-            check( swap_hash_itr->status != static_cast<uint8_t>(swap_status::FINISHED), "swap already finished" );
 
             const std::vector<approval>& approvals = swap_hash_itr->provided_approvals;
-            bool is_already_approval = std::find_if( approvals.begin(),
+            bool is_already_approved = std::find_if( approvals.begin(),
                                                      approvals.end(),
-                                                     [&](const approval& a)
+                                                      [&](const approval& a)
                                                      { return a.level == level; }
                                                      ) == approvals.end();
 
-            check ( is_already_approval, "approval already exist" );
+            check ( is_already_approved, "approval already exist" );
 
             swap_table.modify( *swap_hash_itr, user, [&]( auto& s ) {
                 s.provided_approvals.push_back( approval{ level, current_time_point() } );
@@ -79,13 +78,13 @@ namespace eosio {
         }
     }
 
-    void swap::finish( const name& user, const name& receiver, const string& trx_id,
-                       const string& chain_id, const string eth_address, asset& quantity,
-                       const signature& sign, const uint32_t& swap_init_time ) {
+    void swap::finish( const name& user, const name& receiver, const checksum256& trx_id,
+                       const string& eth_address, asset& quantity, const signature& sign,
+                       const uint32_t& swap_init_time ) {
 
         const checksum256 swap_hash = _get_swap_id(
                 user, receiver, trx_id,
-                chain_id, eth_address, quantity,
+                eth_address, quantity,
                 sign, swap_init_time, {}
         );
         swap_index swap_table( _self, get_first_receiver().value );
@@ -99,13 +98,13 @@ namespace eosio {
 
     }
 
-    void swap::finishnewacc( const name& user, const name& receiver, const string& trx_id,
-                             const string& chain_id, const string eth_address, asset& quantity,
-                             const signature& sign, const uint32_t& swap_init_time,
-                             const public_key owner_key, const public_key active_key                   )  {
+    void swap::finishnewacc( const name& user, const name& receiver, const checksum256& trx_id,
+                             const string& eth_address, asset& quantity, const signature& sign,
+                             const uint32_t& swap_init_time, const public_key owner_key,
+                             const public_key active_key )  {
 
         const checksum256 swap_hash = _get_swap_id(
-                user, receiver, trx_id, chain_id,
+                user, receiver, trx_id,
                 eth_address, quantity, sign,
                 swap_init_time, owner_key
         );
@@ -137,17 +136,15 @@ namespace eosio {
         check( time_point_sec(current_time_point()) > swap_hash_itr->swap_init_time + swap_active_lifetime,
                "active swap lifetime not expired, wait one week" );
         require_recipient( get_self() );
-        require_recipient( user );
 
         swap_table.modify( *swap_hash_itr, user, [&]( auto& s ) {
             s.status = static_cast<uint8_t>(swap_status::CANCELED);
         });
     }
 
-    checksum256 swap::_get_swap_id( const name& user, const name& receiver, const string& trx_id,
-                                    const string& chain_id, const string eth_address, asset& quantity,
-                                    const signature& sign, const uint32_t& swap_init_time,
-                                    const public_key  owner_key ) {
+    checksum256 swap::_get_swap_id( const name& user, const name& receiver, const checksum256& trx_id,
+                                    const string eth_address, asset& quantity, const signature& sign,
+                                    const uint32_t& swap_init_time, const public_key owner_key ) {
 
         require_auth( user );
         swap_index swap_table( _self, get_first_receiver().value );
@@ -165,7 +162,7 @@ namespace eosio {
 
         std::vector<char> swap_payload( swap_key.data.begin(), swap_key.data.end() );
 
-        string payload_str = trx_id + chain_id + eth_address + quantity.to_string()
+        string payload_str = sha256_to_hex( trx_id ) + remchain_id + eth_address + quantity.to_string()
                              + std::to_string( swap_init_timepoint.sec_since_epoch() );
         std::copy( payload_str.begin(), payload_str.end(), back_inserter(swap_payload));
         const checksum256 swap_hash = hash( swap_payload.data() );
@@ -180,7 +177,7 @@ namespace eosio {
                "swap lifetime expired" );
         check( time_point_sec(current_time_point()) < swap_hash_itr->swap_init_time + swap_active_lifetime,
                "active swap lifetime expired, cancel swap, please" );
-//    check( swap_hash_itr->provided_approvals.size() < 15, "not enough approvals" );
+//    check( is_swap_confirmed( swap_hash_itr->provided_approvals ), "not enough active approvals" );
 
         return swap_hash;
     }
@@ -273,35 +270,27 @@ namespace eosio {
         ).send();
     }
 
-    size_t swap::from_hex(const string& hex_str, char* out_data, size_t out_data_len) {
-        auto i = hex_str.begin();
-        uint8_t* out_pos = (uint8_t*)out_data;
-        uint8_t* out_end = out_pos + out_data_len;
-        while (i != hex_str.end() && out_end != out_pos) {
-            *out_pos = from_hex((char)(*i)) << 4;
-            ++i;
-            if (i != hex_str.end()) {
-                *out_pos |= from_hex((char)(*i));
-                ++i;
+    string swap::to_hex(const char* d, uint32_t s) {
+        std::string r;
+        const char* to_hex = "0123456789abcdef";
+        uint8_t* c = (uint8_t*)d;
+        for (uint32_t i = 0; i < s; ++i)
+            (r += to_hex[(c[i] >> 4)]) += to_hex[(c[i] & 0x0f)];
+        return r;
+    }
+
+    bool swap::is_swap_confirmed( const std::vector<approval>& provided_approvals ) {
+        std::vector<name> _producers = get_active_producers();
+        uint8_t quantity_active_appr = 0;
+        for (const auto& appr: provided_approvals) {
+            auto prod_appr = std::find(_producers.begin(), _producers.end(), appr.level.actor);
+            if ( prod_appr != _producers.end() ) {
+                ++quantity_active_appr;
             }
-            ++out_pos;
         }
-        return out_pos - (uint8_t*)out_data;
-    }
-
-    checksum256 swap::hex_to_sha256(const string& hex_str) {
-        check(hex_str.length() == 64, "invalid sha256");
-        checksum256 checksum;
-        from_hex(hex_str, (char*)checksum.data(), sizeof(checksum.data()));
-        return checksum;
-    }
-
-    uint8_t swap::from_hex(char c) {
-        if (c >= '0' && c <= '9') return c - '0';
-        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-        check(false, "Invalid hex character");
-        return 0;
+        const uint8_t majority = (_producers.size() * 2 / 3) + 1;
+        if ( majority <= quantity_active_appr ) { return true; }
+        return false;
     }
 
 } /// namespace eosio

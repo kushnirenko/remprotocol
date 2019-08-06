@@ -50,9 +50,8 @@ namespace eosio {
          * @param swap_init_time - the timestamp transfer transaction in Ethereum blockchain.
          */
         [[eosio::action]]
-        void init( const name& user, const public_key& swap_key, const string& trx_id,
-                   const string& chain_id, const string eth_address, const asset& quantity,
-                   const uint32_t& swap_init_time );
+        void init( const name& user, const public_key& swap_key, const checksum256& trx_id,
+                   const string& eth_address, const asset& quantity, const uint32_t& swap_init_time );
 
         /**
          *  Debug action.
@@ -87,9 +86,9 @@ namespace eosio {
          * @param swap_init_time - the timestamp transfer transaction in Ethereum blockchain.
          */
         [[eosio::action]]
-        void finish( const name& user, const name& receiver, const string& trx_id,
-                     const string& chain_id, const string eth_address, asset& quantity,
-                     const signature& sign, const uint32_t& swap_init_time );
+        void finish( const name& user, const name& receiver, const checksum256& trx_id,
+                     const string& eth_address, asset& quantity, const signature& sign,
+                     const uint32_t& swap_init_time );
 
 
         /**
@@ -108,10 +107,10 @@ namespace eosio {
          * @param active_key - active key account to create.
          */
         [[eosio::action]]
-        void finishnewacc( const name& user, const name& receiver, const string& trx_id,
-                           const string& chain_id, const string eth_address, asset& quantity,
-                           const signature& sign, const uint32_t& swap_init_time,
-                           const public_key owner_key, const public_key active_key );
+        void finishnewacc( const name& user, const name& receiver, const checksum256& trx_id,
+                           const string& eth_address, asset& quantity, const signature& sign,
+                           const uint32_t& swap_init_time, const public_key owner_key,
+                           const public_key active_key );
 
 
         [[eosio::on_notify("eosio.token::transfer")]]
@@ -147,7 +146,7 @@ namespace eosio {
 
         struct [[eosio::table]] swap_data {
             uint64_t                key;
-            string                  trx_id;
+            checksum256             trx_id;
             checksum256             swap_hash;
             time_point              swap_init_time;
             uint8_t                 status;
@@ -157,8 +156,8 @@ namespace eosio {
             uint64_t primary_key()const { return key; }
             checksum256 by_swap_hash()const { return swap_hash; }
 
-	   	 	EOSLIB_SERIALIZE( swap_data, (key)(trx_id)(swap_hash)(swap_init_time)
-	   	 	                             (status)(provided_approvals) )
+//	   	 	EOSLIB_SERIALIZE( swap_data, (key)(trx_id)(swap_hash)(swap_init_time)
+//	   	 	                             (status)(provided_approvals) )
         };
 
         struct permission_level_weight {
@@ -199,11 +198,19 @@ namespace eosio {
             return std::find(_producers.begin(), _producers.end(), user) != _producers.end();
         }
 
+        bool is_swap_confirmed( const std::vector<approval>& provided_approvals );
+
         uint8_t from_hex(char c);
         checksum256 hex_to_sha256(const string& hex_str);
         size_t from_hex(const string& hex_str, char* out_data, size_t out_data_len);
+        string to_hex(const char* d, uint32_t s);
+
         checksum256 hash(const string& str) {
-            return sha256(const_cast<char*>(str.c_str()), str.size());
+            return sha256(str.c_str(), str.size());
+        }
+
+        string sha256_to_hex(const checksum256& sha256) {
+            return to_hex((char*)sha256.data(), sizeof(sha256));
         }
 
         void cleanup_expired_swaps();
@@ -211,10 +218,9 @@ namespace eosio {
         void create_user( const name& user, public_key owner_key, public_key active_key );
 
         void _transfer( const name& receiver, const asset& quantity );
-        checksum256 _get_swap_id( const name& user, const name& receiver, const string& trx_id,
-                                  const string& chain_id, const string eth_address, asset& quantity,
-                                  const signature& sign, const uint32_t& swap_init_time,
-                                  const public_key  owner_key                                               );
+        checksum256 _get_swap_id( const name& user, const name& receiver, const checksum256& trx_id,
+                                  const string eth_address, asset& quantity, const signature& sign,
+                                  const uint32_t& swap_init_time, const public_key owner_key );
     };
     /** @}*/ // end of @defgroup remswap rem.swap
 } /// namespace eosio
