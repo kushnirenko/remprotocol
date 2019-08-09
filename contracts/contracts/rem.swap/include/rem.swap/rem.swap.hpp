@@ -11,7 +11,6 @@
 #include <eosio/permission.hpp>
 #include <eosio/privileged.hpp>
 #include <eosio/time.hpp>
-#include <eosio/system.hpp>
 
 #include <vector>
 #include <string>
@@ -50,8 +49,9 @@ namespace eosio {
          * @param swap_init_time - the timestamp transfer transaction in Ethereum blockchain.
          */
         [[eosio::action]]
-        void init( const name& user, const public_key& swap_key, const checksum256& trx_id,
-                   const string& eth_address, const asset& quantity, const uint32_t& swap_init_time );
+        void init( const name& rampayer, const string& txid, const string& swap_key,
+                   const asset& quantity, const string& return_address, const string& return_chain_id,
+                   const block_timestamp& swap_timestamp );
 
         /**
          *  Debug action.
@@ -86,9 +86,9 @@ namespace eosio {
          * @param swap_init_time - the timestamp transfer transaction in Ethereum blockchain.
          */
         [[eosio::action]]
-        void finish( const name& user, const name& receiver, const checksum256& trx_id,
-                     const string& eth_address, asset& quantity, const signature& sign,
-                     const uint32_t& swap_init_time );
+        void finish( const name& rampayer, const name& receiver, const string& txid,
+                     const string& swap_pubkey_str, asset& quantity, const string& return_address,
+                     const string& return_chain_id, const block_timestamp& swap_timestamp, const signature& sign );
 
 
         /**
@@ -107,19 +107,19 @@ namespace eosio {
          * @param active_key - active key account to create.
          */
         [[eosio::action]]
-        void finishnewacc( const name& user, const name& receiver, const checksum256& trx_id,
-                           const string& eth_address, asset& quantity, const signature& sign,
-                           const uint32_t& swap_init_time, const public_key owner_key,
-                           const public_key active_key );
+        void finishnewacc( const name& rampayer, const name& receiver, const string& owner_pubkey_str,
+                           const string& active_pubkey_str, const string& txid, const string& swap_pubkey_str,
+                           asset& quantity, const string& return_address, const string& return_chain_id,
+                           const block_timestamp& swap_timestamp, const signature& sign );
 
 
-        [[eosio::on_notify("eosio.token::transfer")]]
+        [[eosio::on_notify("rem.token::transfer")]]
         void ontransfer( name from, name to, asset quantity, string memo );
 
-        using init_swap_action = eosio::action_wrapper<"init"_n, &swap::init>;
-        using finish_swap_action = eosio::action_wrapper<"finish"_n, &swap::finish>;
-        using finish_swap_and_create_acc_action = eosio::action_wrapper<"finishnewacc"_n, &swap::finishnewacc>;
-        using cancel_swap_action = eosio::action_wrapper<"cancel"_n, &swap::cancel>;
+        using init_swap_action = action_wrapper<"init"_n, &swap::init>;
+        using finish_swap_action = action_wrapper<"finish"_n, &swap::finish>;
+        using finish_swap_and_create_acc_action = action_wrapper<"finishnewacc"_n, &swap::finishnewacc>;
+        using cancel_swap_action = action_wrapper<"cancel"_n, &swap::cancel>;
 
     private:
         enum class swap_status: uint8_t {
@@ -129,10 +129,14 @@ namespace eosio {
         };
 
         static constexpr symbol core_symbol{"REM", 4};
-        const asset default_cpu_stake{1500, core_symbol};
+        static constexpr symbol RAMCORE_symbol{"RAMCORE", 4};
+        static constexpr symbol RAM_symbol{"RAM", 0};
+        const asset default_cpu_stake{2000000, core_symbol};
         const asset default_net_stake{500, core_symbol};
-        const asset create_account_fee = {200000, core_symbol};
-        const uint32_t default_ram_amount_bytes{3000};
+        const asset create_account_fee = {4000000, core_symbol};
+        const uint32_t default_ram_amount_bytes{3446};
+        const name system_account = "rem"_n;
+        const string separator = "*";
 
         const string remchain_id = "cf057bbfb72640471fd910bcb67639c22df9f92470936cddc1ade0e2f2e7dc4f";
 
@@ -146,9 +150,9 @@ namespace eosio {
 
         struct [[eosio::table]] swap_data {
             uint64_t                key;
-            checksum256             trx_id;
+            string                  txid;
             checksum256             swap_hash;
-            time_point              swap_init_time;
+            block_timestamp         swap_timestamp;
             uint8_t                 status;
 
             std::vector<approval>   provided_approvals;
@@ -158,6 +162,17 @@ namespace eosio {
 
 //	   	 	EOSLIB_SERIALIZE( swap_data, (key)(trx_id)(swap_hash)(swap_init_time)
 //	   	 	                             (status)(provided_approvals) )
+        };
+
+        struct [[eosio::table, eosio::contract("rem.system")]] producer_info2 {
+            name            owner;
+            double          votepay_share = 0;
+            time_point      last_votepay_share_update;
+
+            uint64_t primary_key()const { return owner.value; }
+
+            // explicit serialization macro is not necessary, used here only to improve compilation time
+//            EOSLIB_SERIALIZE( producer_info2, (owner)(votepay_share)(last_votepay_share_update) )
         };
 
         struct permission_level_weight {
@@ -193,9 +208,25 @@ namespace eosio {
                 const_mem_fun< swap_data, checksum256, &swap_data::by_swap_hash >>
                 > swap_index;
 
+        typedef eosio::multi_index< "producers2"_n, producer_info2 > producers_table2;
+
         bool is_block_producer( const name& user ) {
-            std::vector<name> _producers = get_active_producers();
-            return std::find(_producers.begin(), _producers.end(), user) != _producers.end();
+//            std::vector<name> _producers = get_active_producers();
+            name system_acc = "rem"_n;
+            producers_table2 _producers_table( system_acc, system_acc.value );
+            return _producers_table.find( user.value ) != _producers_table.end();
+//            check(false, _producers.size());
+//            return std::find(_producers.begin(), _producers.end(), user) != _producers.end();
+        }
+
+        std::vector<name> get_active_producers() {
+            name system_acc = "rem"_n;
+            producers_table2 _producers_table( system_acc, system_acc.value );
+            std::vector<name> producers;
+            for ( auto _table_itr = _producers_table.begin(); _table_itr != _producers_table.end(); ++_table_itr ) {
+                producers.push_back( _table_itr->owner );
+            }
+            return producers;
         }
 
         bool is_swap_confirmed( const std::vector<approval>& provided_approvals );
@@ -213,14 +244,26 @@ namespace eosio {
             return to_hex((char*)sha256.data(), sizeof(sha256));
         }
 
+        void to_reward_action( const asset& amount ) {
+            action(
+                    permission_level{ _self, "active"_n},
+                    system_account,
+                    "torewards"_n,
+                    std::make_tuple(_self, amount)
+            ).send();
+        }
+
+        void validate_swap( const checksum256& swap_hash );
+
         void cleanup_expired_swaps();
 
         void create_user( const name& user, public_key owner_key, public_key active_key );
 
         void _transfer( const name& receiver, const asset& quantity );
-        checksum256 _get_swap_id( const name& user, const name& receiver, const checksum256& trx_id,
-                                  const string eth_address, asset& quantity, const signature& sign,
-                                  const uint32_t& swap_init_time, const public_key owner_key );
+        checksum256 _get_swap_id( const name& rampayer, const name& receiver, const string& txid,
+                                  const string& swap_pubkey_str, asset& quantity, const string& return_address,
+                                  const string& return_chain_id, const block_timestamp& timestamp,
+                                  const signature& sign, const string owner_key, const string active_key );
     };
     /** @}*/ // end of @defgroup remswap rem.swap
 } /// namespace eosio

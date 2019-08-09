@@ -4,12 +4,15 @@
 
 #include <rem.swap/rem.swap.hpp>
 
+#include "base58.cpp"
+
 namespace eosio {
 
-    void swap::init( const name& user, const public_key& swap_key, const checksum256& trx_id,
-                     const string& eth_address, const asset& quantity, const uint32_t& swap_init_time ) {
+    void swap::init( const name& rampayer, const string& txid, const string& swap_key,
+                     const asset& quantity, const string& return_address, const string& return_chain_id,
+                     const block_timestamp& swap_timestamp ) {
 
-        require_auth( user );
+        require_auth( rampayer );
         swap_index swap_table( _self, get_first_receiver().value );
 
         check( quantity.is_valid(), "invalid quantity" );
@@ -17,39 +20,34 @@ namespace eosio {
         check( quantity.amount > create_account_fee.amount, "the quantity must be greater "
                                                             "than the account creation fee" );
 
-        const time_point swap_init_timepoint = time_point(seconds(swap_init_time));
+        const time_point swap_timepoint = swap_timestamp.to_time_point();
 
-        std::vector<char> swap_payload( swap_key.data.begin(), swap_key.data.end() );
-        string payload_str = sha256_to_hex( trx_id ) + remchain_id + eth_address + quantity.to_string()
-                             + std::to_string( swap_init_timepoint.sec_since_epoch() );
-        std::copy( payload_str.begin(), payload_str.end(), back_inserter(swap_payload));
+        string swap_payload = swap_key + separator + txid + separator + remchain_id
+                             + separator + quantity.to_string() + separator + return_address
+                             + separator + return_chain_id + separator
+                             + std::to_string( swap_timepoint.sec_since_epoch() );
 
-        checksum256 swap_hash = hash( swap_payload.data() );
+        checksum256 swap_hash = hash( swap_payload );
         auto swap_hash_idx = swap_table.get_index<"byhash"_n>();
         const auto swap_hash_itr = swap_hash_idx.find( swap_hash );
-        auto level = permission_level( user, "active"_n );
+        auto level = permission_level( rampayer, "active"_n );
 
-        check( time_point_sec(current_time_point()) < swap_init_timepoint + swap_lifetime, "swap lifetime expired" );
+        check( time_point_sec(current_time_point()) < swap_timepoint + swap_lifetime, "swap lifetime expired" );
         cleanup_expired_swaps();
 
-        const bool is_bp = is_block_producer(user);
+        const bool is_bp = is_block_producer(rampayer);
         if ( swap_hash_itr == swap_hash_idx.end() ) {
-            swap_table.emplace(user, [&]( auto& s ) {
+            swap_table.emplace(rampayer, [&]( auto& s ) {
                 s.key = swap_table.available_primary_key();
-                s.trx_id = trx_id;
+                s.txid = txid;
                 s.swap_hash = swap_hash;
-                s.swap_init_time = swap_init_timepoint;
+                s.swap_timestamp = swap_timestamp;
                 s.status = static_cast<uint8_t>(swap_status::INITIALIZED);
+                is_bp ? s.provided_approvals.push_back( approval{ level, current_time_point() } ) : void();
             });
-
-//            if ( is_bp ) {
-//                swap_table.modify( *swap_hash_itr, user, [&]( auto& s ) {
-//                    s.provided_approvals.push_back( approval{ level, current_time_point() } );
-//                });
-//            }
         }
         else {
-//        check( is_bp, "authorization error" );
+            check( is_bp, "authorization error" );
             check( swap_hash_itr->status != static_cast<uint8_t>(swap_status::CANCELED), "swap already canceled" );
 
             const std::vector<approval>& approvals = swap_hash_itr->provided_approvals;
@@ -61,7 +59,7 @@ namespace eosio {
 
             check ( is_already_approved, "approval already exist" );
 
-            swap_table.modify( *swap_hash_itr, user, [&]( auto& s ) {
+            swap_table.modify( *swap_hash_itr, rampayer, [&]( auto& s ) {
                 s.provided_approvals.push_back( approval{ level, current_time_point() } );
             });
         }
@@ -78,45 +76,65 @@ namespace eosio {
         }
     }
 
-    void swap::finish( const name& user, const name& receiver, const checksum256& trx_id,
-                       const string& eth_address, asset& quantity, const signature& sign,
-                       const uint32_t& swap_init_time ) {
+    void swap::finish( const name& rampayer, const name& receiver, const string& txid,
+                       const string& swap_pubkey_str, asset& quantity, const string& return_address,
+                       const string& return_chain_id, const block_timestamp& swap_timestamp, const signature& sign ) {
+
+        require_auth( rampayer );
 
         const checksum256 swap_hash = _get_swap_id(
-                user, receiver, trx_id,
-                eth_address, quantity,
-                sign, swap_init_time, {}
+                rampayer, receiver, txid, swap_pubkey_str,
+                quantity, return_address, return_chain_id,
+                swap_timestamp, sign, {}, {}
         );
+        validate_swap( swap_hash );
+
         swap_index swap_table( _self, get_first_receiver().value );
         auto swap_hash_idx = swap_table.get_index<"byhash"_n>();
-        const auto swap_itr = swap_hash_idx.find( swap_hash );
+        const auto swap_hash_itr = swap_hash_idx.find( swap_hash );
+
+        const time_point swap_timepoint = swap_hash_itr->swap_timestamp.to_time_point();
+        check( time_point_sec(current_time_point()) < swap_timepoint + swap_active_lifetime,
+               "active swap lifetime expired, cancel swap, please" );
 
         _transfer( receiver, quantity );
-        swap_table.modify( *swap_itr, user, [&]( auto& s ) {
+//        system_contract::torewards_action torewards("rem"_n, { get_self(), "active"_n });
+//        torewards.send( _self, create_account_fee );
+//        to_reward_action( create_account_fee );
+        swap_table.modify( *swap_hash_itr, rampayer, [&]( auto& s ) {
             s.status = static_cast<uint8_t>(swap_status::FINISHED);
         });
 
     }
 
-    void swap::finishnewacc( const name& user, const name& receiver, const checksum256& trx_id,
-                             const string& eth_address, asset& quantity, const signature& sign,
-                             const uint32_t& swap_init_time, const public_key owner_key,
-                             const public_key active_key )  {
+    void swap::finishnewacc( const name& rampayer, const name& receiver, const string& owner_pubkey_str,
+                             const string& active_pubkey_str, const string& txid, const string& swap_pubkey_str,
+                             asset& quantity, const string& return_address, const string& return_chain_id,
+                             const block_timestamp& swap_timestamp, const signature& sign )  {
+
+        require_auth( rampayer );
 
         const checksum256 swap_hash = _get_swap_id(
-                user, receiver, trx_id,
-                eth_address, quantity, sign,
-                swap_init_time, owner_key
+                rampayer, receiver, txid, swap_pubkey_str,
+                quantity, return_address, return_chain_id,
+                swap_timestamp, sign, owner_pubkey_str, active_pubkey_str
         );
         swap_index swap_table( _self, get_first_receiver().value );
         auto swap_hash_idx = swap_table.get_index<"byhash"_n>();
         const auto swap_itr = swap_hash_idx.find( swap_hash );
 
+
+        public_key owner_key = string_to_public_key( owner_pubkey_str );
+        public_key active_key = string_to_public_key( active_pubkey_str );
         create_user( receiver, owner_key, active_key );
+
+//        eosiosystem::system_contract::torewards_action torewards("rem.system"_n, { get_self(), "active"_n });
+//        torewards.send( _self, create_account_fee );
+        to_reward_action( create_account_fee );
         quantity.amount = quantity.amount - create_account_fee.amount;
 
         _transfer( receiver, quantity );
-        swap_table.modify( *swap_itr, user, [&]( auto& s ) {
+        swap_table.modify( *swap_itr, rampayer, [&]( auto& s ) {
             s.status = static_cast<uint8_t>(swap_status::FINISHED);
         });
     }
@@ -124,16 +142,12 @@ namespace eosio {
     void swap::cancel( const name& user, const checksum256& swap_id ) {
         require_auth( user );
         swap_index swap_table( _self, get_first_receiver().value );
-
         auto swap_hash_idx = swap_table.get_index<"byhash"_n>();
         const auto swap_hash_itr = swap_hash_idx.find( swap_id );
 
-        check( swap_hash_itr != swap_hash_idx.end(), "swap doesn't exist" );
-        check( swap_hash_itr->status != static_cast<uint8_t>(swap_status::CANCELED), "swap already canceled" );
-        check( swap_hash_itr->status != static_cast<uint8_t>(swap_status::FINISHED), "swap already finished" );
-        check( time_point_sec(current_time_point()) < swap_hash_itr->swap_init_time + swap_lifetime,
-               "swap lifetime expired" );
-        check( time_point_sec(current_time_point()) > swap_hash_itr->swap_init_time + swap_active_lifetime,
+        validate_swap( swap_id );
+        const time_point swap_timepoint = swap_hash_itr->swap_timestamp.to_time_point();
+        check( time_point_sec(current_time_point()) > swap_timepoint + swap_active_lifetime,
                "active swap lifetime not expired, wait one week" );
         require_recipient( get_self() );
 
@@ -142,52 +156,57 @@ namespace eosio {
         });
     }
 
-    checksum256 swap::_get_swap_id( const name& user, const name& receiver, const checksum256& trx_id,
-                                    const string eth_address, asset& quantity, const signature& sign,
-                                    const uint32_t& swap_init_time, const public_key owner_key ) {
+    checksum256 swap::_get_swap_id( const name& rampayer, const name& receiver, const string& txid,
+                                    const string& swap_pubkey_str, asset& quantity, const string& return_address,
+                                    const string& return_chain_id, const block_timestamp& swap_timestamp,
+                                    const signature& sign, const string owner_key, const string active_key ) {
 
-        require_auth( user );
         swap_index swap_table( _self, get_first_receiver().value );
 
-        const time_point swap_init_timepoint = time_point( seconds(swap_init_time) );
+        const time_point swap_timepoint = swap_timestamp.to_time_point();
 
-        std::vector<char> sing_payload;
-        // if first byte of owner_key is '\0', key is empty
-        if ( owner_key.data[0] != '\0'){
-            std::copy(owner_key.data.begin(), owner_key.data.end(), back_inserter(sing_payload));
-        }
-        std::copy( receiver.to_string().begin(), receiver.to_string().end(), back_inserter(sing_payload));
-        checksum256 digest = hash( sing_payload.data() );
+        string payload = txid + separator + remchain_id + separator
+                         + quantity.to_string() + separator + return_address
+                         + separator + return_chain_id + separator
+                         + std::to_string( swap_timepoint.sec_since_epoch() );
+
+        string sign_payload = (owner_key.size() == 0) ? receiver.to_string() + separator + payload :
+                                                        receiver.to_string() + separator + owner_key + separator
+                                                        + active_key + payload;
+
+        public_key swap_pubkey = string_to_public_key( swap_pubkey_str );
+        checksum256 digest = hash( sign_payload );
+        assert_recover_key(digest, sign, swap_pubkey);
         public_key swap_key = recover_key( digest, sign );
 
-        std::vector<char> swap_payload( swap_key.data.begin(), swap_key.data.end() );
+        string swap_payload = swap_pubkey_str + separator + payload;
+        const checksum256 swap_hash = hash( swap_payload );
+        return swap_hash;
+    }
 
-        string payload_str = sha256_to_hex( trx_id ) + remchain_id + eth_address + quantity.to_string()
-                             + std::to_string( swap_init_timepoint.sec_since_epoch() );
-        std::copy( payload_str.begin(), payload_str.end(), back_inserter(swap_payload));
-        const checksum256 swap_hash = hash( swap_payload.data() );
+    void swap::validate_swap( const checksum256& swap_hash ) {
 
+        swap_index swap_table( _self, get_first_receiver().value );
         auto swap_hash_idx = swap_table.get_index<"byhash"_n>();
         const auto swap_hash_itr = swap_hash_idx.find( swap_hash );
 
         check( swap_hash_itr != swap_hash_idx.end(), "swap doesn't exist" );
         check( swap_hash_itr->status != static_cast<uint8_t>(swap_status::CANCELED), "swap already canceled" );
         check( swap_hash_itr->status != static_cast<uint8_t>(swap_status::FINISHED), "swap already finished" );
-        check( time_point_sec(current_time_point()) < swap_hash_itr->swap_init_time + swap_lifetime,
-               "swap lifetime expired" );
-        check( time_point_sec(current_time_point()) < swap_hash_itr->swap_init_time + swap_active_lifetime,
-               "active swap lifetime expired, cancel swap, please" );
-//    check( is_swap_confirmed( swap_hash_itr->provided_approvals ), "not enough active approvals" );
 
-        return swap_hash;
+        const time_point swap_timepoint = swap_hash_itr->swap_timestamp.to_time_point();
+        check( time_point_sec(current_time_point()) < swap_timepoint + swap_lifetime,
+               "swap lifetime expired" );
+        check( is_swap_confirmed( swap_hash_itr->provided_approvals ), "not enough active approvals" );
     }
 
     void swap::cleanup_expired_swaps() {
         swap_index swap_table( _self, get_first_receiver().value );
 
-        for ( auto _table_itr = swap_table.begin(); _table_itr != swap_table.end();) {
+        for ( auto _table_itr = swap_table.begin(); _table_itr != swap_table.end(); ) {
 
-            if ( time_point_sec(current_time_point()) > _table_itr->swap_init_time + swap_lifetime ) {
+            time_point swap_timepoint = _table_itr->swap_timestamp.to_time_point();
+            if ( time_point_sec(current_time_point()) > swap_timepoint + swap_lifetime ) {
                 auto _current_itr = _table_itr;
                 _table_itr = swap_table.erase(_current_itr);
 
@@ -197,7 +216,7 @@ namespace eosio {
         }
     }
 
-    [[eosio::on_notify("eosio.token::transfer")]]
+    [[eosio::on_notify("rem.token::transfer")]]
     void swap::ontransfer(name from, name to, asset quantity, string memo) {
         if (to != get_self() || from == get_self())
         {
@@ -211,15 +230,13 @@ namespace eosio {
 
         string chain_id = memo.substr( space_pos + 1 );
         string eth_address = memo.substr( 0, space_pos );
-//        check( chain_id == eth_chain_id, "not correct chainID" );
-        check( eth_address.size() == 42 || eth_address.size() == 40, "not correct Ethereum address" );
     }
 
     void swap::_transfer( const name& receiver, const asset& quantity) {
 //        swap_index swap_table( _self, get_first_receiver().value );
         action(
                 permission_level{ get_self(), "active"_n },
-                "eosio.token"_n, "transfer"_n,
+                "rem.token"_n, "transfer"_n,
                 std::make_tuple( _self, receiver, quantity, string("atomic-swap") )
         ).send();
     }
@@ -257,16 +274,16 @@ namespace eosio {
 
         action(
                 permission_level{ _self, "active"_n, },
-                "eosio"_n,
+                system_account,
                 "newaccount"_n,
                 new_account
         ).send();
 
         action(
                 permission_level{ _self, "active"_n},
-                "eosio"_n,
+                system_account,
                 "delegatebw"_n,
-                std::make_tuple(_self, user, default_net_stake, default_cpu_stake, true)
+                std::make_tuple(_self, user, default_cpu_stake, true)
         ).send();
     }
 
