@@ -2,6 +2,8 @@
  *  @copyright defined in eos/LICENSE.txt
  */
 
+#include <eosio/singleton.hpp>
+
 #include <rem.swap/rem.swap.hpp>
 
 namespace eosio {

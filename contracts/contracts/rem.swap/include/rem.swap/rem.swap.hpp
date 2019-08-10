@@ -9,11 +9,11 @@
 #include <eosio/crypto.hpp>
 #include <eosio/eosio.hpp>
 #include <eosio/permission.hpp>
-#include <eosio/singleton.hpp>
 #include <eosio/privileged.hpp>
 #include <eosio/time.hpp>
 
 #include <vector>
+#include <numeric>
 #include <string>
 
 namespace eosiosystem {
@@ -41,18 +41,21 @@ namespace eosio {
         /**
          * Init swap action.
          *
-         * @details Initiate token swap.
+         * @details Initiate token swap in remchain.
          *
-         * @param user - the owner account to execute the init action for,
-         * @param swap_key - the public key created for the token swap,
-         * @param trx_id - the transaction transfer id in Ethereum blockchain,
+         * @param rampayer - the owner account to execute the init action for,
+         * @param txid - the transaction transfer id in blockchain,
+         * @param swap_pubkey - the public key created for the token swap,
          * @param quantity - the quantity of tokens in the transfer transaction,
-         * @param swap_init_time - the timestamp transfer transaction in Ethereum blockchain.
+         * @param return_address - the address that will receive swaps tokens back,
+         * @param return_chain_id - the chain id of the return address,
+         * @param swap_timestamp - the timestamp transfer transaction in blockchain.
          */
         [[eosio::action]]
         void init( const name& rampayer, const string& txid, const string& swap_pubkey,
                    const asset& quantity, const string& return_address, const string& return_chain_id,
-                   const block_timestamp& timestamp );
+                   const block_timestamp& swap_timestamp );
+
 
         /**
          *  Debug action.
@@ -66,14 +69,18 @@ namespace eosio {
          *
          * @details Cancel already initialized token swap.
          *
-         * @param user - the owner account to execute the cancel action for,
-         * @param swap_id - hash of swap data ( swap_key, trx_id, chain_id, eth_address,
-         * quantity, swap_init_time ).
+         * @param rampayer - the owner account to execute the cancel action for,
+         * @param txid - the transaction transfer id in blockchain,
+         * @param swap_pubkey - the public key created for the token swap,
+         * @param quantity - the quantity of tokens in the transfer transaction,
+         * @param return_address - the address that will receive swaps tokens back,
+         * @param return_chain_id - the chain id of the return address,
+         * @param swap_timestamp - the timestamp transfer transaction in blockchain.
          */
         [[eosio::action]]
         void cancel( const name& rampayer, const string& txid, const string& swap_pubkey,
                      const asset& quantity, const string& return_address, const string& return_chain_id,
-                     const block_timestamp& timestamp );
+                     const block_timestamp& swap_timestamp );
 
 
         /**
@@ -81,16 +88,19 @@ namespace eosio {
          *
          * @details Finish already approved token swap.
          *
-         * @param user - the owner account to execute the finish action for,
+         * @param rampayer - the owner account to execute the finish action for,
          * @param receiver - the account to be swap finished to,
-         * @param trx_id - the transaction transfer id in Ethereum blockchain,
-         * @param quantity - the quantity of tokens to be swaped,
-         * @param sign - the signature that sign by swap-key with data : name receiver account,
-         * @param swap_init_time - the timestamp transfer transaction in Ethereum blockchain.
+         * @param txid - the transaction transfer id in blockchain,
+         * @param swap_pubkey - the public key created for the token swap,
+         * @param quantity - the quantity of tokens in the transfer transaction,
+         * @param return_address - the address that will receive swap tokens back,
+         * @param return_chain_id - the chain id of the return address,
+         * @param swap_timestamp - the timestamp transfer transaction in blockchain,
+         * @param sign - the signature that sign swap payload by swap_pubkey.
          */
         [[eosio::action]]
         void finish( const name& rampayer, const name& receiver, const string& txid,
-                     const string& swap_pubkey_str, asset& quantity, const string& return_address,
+                     const string& swap_pubkey, asset& quantity, const string& return_address,
                      const string& return_chain_id, const block_timestamp& swap_timestamp, const signature& sign );
 
 
@@ -99,15 +109,17 @@ namespace eosio {
          *
          * @details Finish already approved token swap and create new account.
          *
-         * @param user - the owner account to execute the finish action for,
+         * @param rampayer - the owner account to execute the finish action for,
          * @param receiver - the account to be swap finished to,
-         * @param trx_id - the transaction transfer id in Ethereum blockchain,
-         * @param quantity - the quantity of tokens to be swapped,
-         * @param sign - the signature that sign by swap-key with data : name receiver account,
-         * owner_key, public_key,
-         * @param swap_init_time - the timestamp transfer transaction in Ethereum blockchain,
          * @param owner_key - owner key account to create,
-         * @param active_key - active key account to create.
+         * @param active_key - active key account to create,
+         * @param txid - the transaction transfer id in blockchain,
+         * @param swap_pubkey - the public key created for the token swap,
+         * @param quantity - the quantity of tokens in the transfer transaction,
+         * @param return_address - the address that will receive swap tokens back,
+         * @param return_chain_id - the chain id of the return address,
+         * @param swap_timestamp - the timestamp transfer transaction in blockchain,
+         * @param sign - the signature that sign swap payload by swap_pubkey.
          */
         [[eosio::action]]
         void finishnewacc( const name& rampayer, const name& receiver, const string& owner_pubkey_str,
@@ -115,14 +127,39 @@ namespace eosio {
                            asset& quantity, const string& return_address, const string& return_chain_id,
                            const block_timestamp& swap_timestamp, const signature& sign );
 
+        /**
+         * Set block producers reward.
+         *
+         * @details Change amount of block producers reward, action permitted only for producers.
+         *
+         * @param quantity - the quantity of tokens to be rewarded.
+         */
+        [[eosio::action]]
+        void setbprewards( const asset& quantity );
 
+
+        /**
+         * Init swap action.
+         *
+         * @details Initiate token swap from remchain.
+         * Action initiated after transfer tokens to swap contract with valid data.
+         *
+         * @param from - the account to transfer from,
+         * @param to - the account to be transferred to (remme swap contract),
+         * @param quantity - the quantity of tokens to be transferred,
+         * @param memo :
+         *       @param return_chain_id - the chain id of the return address,
+         *       @param return_address - the address that will receive swap tokens back.
+         */
         [[eosio::on_notify("rem.token::transfer")]]
         void ontransfer( name from, name to, asset quantity, string memo );
+
 
         using init_swap_action = action_wrapper<"init"_n, &swap::init>;
         using finish_swap_action = action_wrapper<"finish"_n, &swap::finish>;
         using finish_swap_and_create_acc_action = action_wrapper<"finishnewacc"_n, &swap::finishnewacc>;
         using cancel_swap_action = action_wrapper<"cancel"_n, &swap::cancel>;
+        using set_bprewards_action = action_wrapper<"setbprewards"_n, &swap::setbprewards>;
 
     private:
         enum class swap_status: int8_t {
@@ -132,9 +169,9 @@ namespace eosio {
         };
 
         static constexpr symbol core_symbol{"REM", 4};
+        asset producers_reward{50, core_symbol};
         const name system_account = "rem"_n;
         const name system_token_account = "rem.token"_n;
-        const string delimiter = "*";
 
         const string remchain_id = "93ece941df27a5787a405383a66a7c26d04e80182adf504365710331ac0625a7";
 
@@ -144,17 +181,18 @@ namespace eosio {
         struct [[eosio::table]] swap_data {
             uint64_t                      key;
             string                        txid;
-            checksum256                   swap_hash;
+            checksum256                   swap_id;
             block_timestamp               swap_timestamp;
             int8_t                        status;
 
             std::vector<permission_level> provided_approvals;
 
             uint64_t primary_key()const { return key; }
-            checksum256 by_swap_hash()const { return swap_hash; }
+            checksum256 by_swap_id()const { return swap_id; }
 
-	   	 	EOSLIB_SERIALIZE( swap_data, (key)(txid)(swap_hash)(swap_timestamp)
-	   	 	                             (status)(provided_approvals) )
+            // explicit serialization macro is not necessary, used here only to improve compilation time
+            EOSLIB_SERIALIZE( swap_data, (key)(txid)(swap_id)(swap_timestamp)
+                                         (status)(provided_approvals) )
         };
 
         struct permission_level_weight {
@@ -187,7 +225,7 @@ namespace eosio {
         };
 
         typedef multi_index< "swaps2"_n, swap_data, indexed_by <"byhash"_n,
-                const_mem_fun< swap_data, checksum256, &swap_data::by_swap_hash >>
+                const_mem_fun< swap_data, checksum256, &swap_data::by_swap_id >>
                 > swap_index;
 
         bool is_block_producer( const name& user );
@@ -204,37 +242,17 @@ namespace eosio {
             return sha256(str.c_str(), str.size());
         }
 
-        void to_rewards( const asset& quantity ) {
-            action(
-                    permission_level{ get_self(), "active"_n },
-                    system_account, "torewards"_n,
-                    std::make_tuple( _self, quantity )
-            ).send();
-        }
-
-        void _retire_tokens( const asset& quantity ) {
-            action(
-                    permission_level{ _self, "active"_n },
-                    system_token_account, "retire"_n,
-                    std::make_tuple( quantity, string("swap retire tokens") )
-            ).send();
-        }
-
+        void to_rewards( const asset& quantity );
+        void _retire_tokens( const asset& quantity );
         void _transfer( const name& receiver, const asset& quantity );
-
-        void _issue_tokens( const asset& quantity ) {
-            action(
-                    permission_level{ _self, "active"_n },
-                    system_token_account, "issue"_n,
-                    std::make_tuple( _self, quantity, string("swap issue tokens") )
-            ).send();
-        }
+        void _issue_tokens( const asset& quantity );
+        void create_user( const name& user, const public_key& owner_key,
+                          const public_key& active_key, const asset& min_account_stake );
 
         void validate_swap( const checksum256& swap_hash );
         void cleanup_expired_swaps();
 
-        void create_user( const name& user, const public_key& owner_key,
-                          const public_key& active_key, const asset& min_account_stake );
+        string join( std::vector<string>&& vec, string delim = string("*") );
     };
     /** @}*/ // end of @defgroup remswap rem.swap
 } /// namespace eosio
