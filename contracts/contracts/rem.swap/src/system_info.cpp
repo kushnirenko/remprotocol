@@ -36,11 +36,11 @@ namespace eosio {
         // explicit serialization macro is not necessary, used here only to improve compilation time
         EOSLIB_SERIALIZE_DERIVED( eosio_global_state, eosio::blockchain_parameters,
         (max_ram_size)(min_account_stake)(total_ram_bytes_reserved)(total_ram_stake)
-                (last_schedule)(last_schedule_version)(current_round_start_time)
-                (last_producer_schedule_update)(last_pervote_bucket_fill)
-                (perstake_bucket)(pervote_bucket)(perblock_bucket)(total_unpaid_blocks)(total_producer_stake)
-                (total_activated_stake)(thresh_activated_stake_time)
-                (last_producer_schedule_size)(total_producer_vote_weight)(total_active_producer_vote_weight)(last_name_close) )
+        (last_schedule)(last_schedule_version)(current_round_start_time)
+        (last_producer_schedule_update)(last_pervote_bucket_fill)
+        (perstake_bucket)(pervote_bucket)(perblock_bucket)(total_unpaid_blocks)(total_producer_stake)
+        (total_activated_stake)(thresh_activated_stake_time)
+        (last_producer_schedule_size)(total_producer_vote_weight)(total_active_producer_vote_weight)(last_name_close) )
     };
 
     struct [[eosio::table, eosio::contract("rem.system")]] producer_info2 {
@@ -51,31 +51,25 @@ namespace eosio {
         uint64_t primary_key()const { return owner.value; }
 
         // explicit serialization macro is not necessary, used here only to improve compilation time
-            EOSLIB_SERIALIZE( producer_info2, (owner)(votepay_share)(last_votepay_share_update) )
+        EOSLIB_SERIALIZE( producer_info2, (owner)(votepay_share)(last_votepay_share_update) )
     };
 
-    typedef eosio::multi_index< "producers2"_n, producer_info2 > producers_table2;
+    typedef eosio::multi_index< "producers2"_n, producer_info2 > producers_table;
     typedef eosio::singleton< "global"_n, eosio_global_state >   global_state_singleton;
 
     asset swap::get_min_account_stake() {
-        name system_acc = "rem"_n;
-        global_state_singleton global( system_acc, system_acc.value );
+        global_state_singleton global( system_account, system_account.value );
         auto _gstate = global.get();
         return { static_cast<int64_t>( _gstate.min_account_stake ), core_symbol };
     }
 
     bool swap::is_block_producer( const name& user ) {
-//            std::vector<name> _producers = get_active_producers();
-        name system_acc = "rem"_n;
-        producers_table2 _producers_table( system_acc, system_acc.value );
+        producers_table _producers_table( system_account, system_account.value );
         return _producers_table.find( user.value ) != _producers_table.end();
-//            check(false, _producers.size());
-//            return std::find(_producers.begin(), _producers.end(), user) != _producers.end();
     }
 
     std::vector<name> swap::get_active_producers() {
-        name system_acc = "rem"_n;
-        producers_table2 _producers_table( system_acc, system_acc.value );
+        producers_table _producers_table( system_account, system_account.value );
         std::vector<name> producers;
         for ( auto _table_itr = _producers_table.begin(); _table_itr != _producers_table.end(); ++_table_itr ) {
             producers.push_back( _table_itr->owner );

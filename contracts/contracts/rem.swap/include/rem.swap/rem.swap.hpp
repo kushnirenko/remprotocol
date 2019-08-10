@@ -51,7 +51,7 @@ namespace eosio {
          */
         [[eosio::action]]
         void init( const name& rampayer, const string& txid, const string& swap_pubkey,
-                   const asset& amount, const string& return_address, const string& return_chain_id,
+                   const asset& quantity, const string& return_address, const string& return_chain_id,
                    const block_timestamp& timestamp );
 
         /**
@@ -72,7 +72,7 @@ namespace eosio {
          */
         [[eosio::action]]
         void cancel( const name& rampayer, const string& txid, const string& swap_pubkey,
-                     const asset& amount, const string& return_address, const string& return_chain_id,
+                     const asset& quantity, const string& return_address, const string& return_chain_id,
                      const block_timestamp& timestamp );
 
 
@@ -125,43 +125,36 @@ namespace eosio {
         using cancel_swap_action = action_wrapper<"cancel"_n, &swap::cancel>;
 
     private:
-        enum class swap_status: uint8_t {
+        enum class swap_status: int8_t {
+            CANCELED = -1,
             INITIALIZED = 0,
-            CANCELED = 1,
-            FINISHED = 2
+            FINISHED = 1
         };
 
-        static constexpr symbol core_symbol{"TST", 4};
-        static constexpr symbol tst_symbol{"TST", 4};
-        static constexpr symbol RAMCORE_symbol{"RAMCORE", 4};
-        asset create_account_fee = {200000, core_symbol};
+        static constexpr symbol core_symbol{"REM", 4};
         const name system_account = "rem"_n;
+        const name system_token_account = "rem.token"_n;
         const string delimiter = "*";
 
-        const string remchain_id = "cf057bbfb72640471fd910bcb67639c22df9f92470936cddc1ade0e2f2e7dc4f";
+        const string remchain_id = "93ece941df27a5787a405383a66a7c26d04e80182adf504365710331ac0625a7";
 
         const time_point swap_lifetime = time_point(seconds(15552000)); // 180 days
         const time_point swap_active_lifetime = time_point(seconds(604800)); // 7 days
 
-        struct approval {
-            permission_level level;
-            time_point       time;
-        };
-
         struct [[eosio::table]] swap_data {
-            uint64_t                key;
-            string                  txid;
-            checksum256             swap_hash;
-            block_timestamp         swap_timestamp;
-            uint8_t                 status;
+            uint64_t                      key;
+            string                        txid;
+            checksum256                   swap_hash;
+            block_timestamp               swap_timestamp;
+            int8_t                        status;
 
-            std::vector<approval>   provided_approvals;
+            std::vector<permission_level> provided_approvals;
 
             uint64_t primary_key()const { return key; }
             checksum256 by_swap_hash()const { return swap_hash; }
 
-//	   	 	EOSLIB_SERIALIZE( swap_data, (key)(trx_id)(swap_hash)(swap_init_time)
-//	   	 	                             (status)(provided_approvals) )
+	   	 	EOSLIB_SERIALIZE( swap_data, (key)(txid)(swap_hash)(swap_timestamp)
+	   	 	                             (status)(provided_approvals) )
         };
 
         struct permission_level_weight {
@@ -197,23 +190,24 @@ namespace eosio {
                 const_mem_fun< swap_data, checksum256, &swap_data::by_swap_hash >>
                 > swap_index;
 
+        bool is_block_producer( const name& user );
+        std::vector<name> get_active_producers();
         asset get_min_account_stake();
 
-        bool is_block_producer( const name& user );
-
-        std::vector<name> get_active_producers();
-
-        bool is_swap_confirmed( const std::vector<approval>& provided_approvals );
+        bool is_swap_confirmed( const std::vector<permission_level>& provided_approvals );
+        checksum256 _get_swap_id( const name& rampayer, const name& receiver, const string& txid,
+                                  const string& swap_pubkey_str, asset& quantity, const string& return_address,
+                                  const string& return_chain_id, const block_timestamp& timestamp,
+                                  const signature& sign, const string owner_key, const string active_key );
 
         checksum256 hash(const string& str) {
             return sha256(str.c_str(), str.size());
         }
 
         void to_rewards( const asset& quantity ) {
-//            check(false, amount.to_string() );
             action(
                     permission_level{ get_self(), "active"_n },
-                    "rem"_n, "torewards"_n,
+                    system_account, "torewards"_n,
                     std::make_tuple( _self, quantity )
             ).send();
         }
@@ -221,31 +215,26 @@ namespace eosio {
         void _retire_tokens( const asset& quantity ) {
             action(
                     permission_level{ _self, "active"_n },
-                    "rem.token"_n, "retire"_n,
+                    system_token_account, "retire"_n,
                     std::make_tuple( quantity, string("swap retire tokens") )
             ).send();
         }
 
+        void _transfer( const name& receiver, const asset& quantity );
+
         void _issue_tokens( const asset& quantity ) {
             action(
                     permission_level{ _self, "active"_n },
-                    "rem.token"_n, "issue"_n,
+                    system_token_account, "issue"_n,
                     std::make_tuple( _self, quantity, string("swap issue tokens") )
             ).send();
         }
 
         void validate_swap( const checksum256& swap_hash );
-
         void cleanup_expired_swaps();
 
         void create_user( const name& user, const public_key& owner_key,
-                          const public_key& active_key, const asset& create_account_fee );
-
-        void _transfer( const name& receiver, const asset& quantity );
-        checksum256 _get_swap_id( const name& rampayer, const name& receiver, const string& txid,
-                                  const string& swap_pubkey_str, asset& quantity, const string& return_address,
-                                  const string& return_chain_id, const block_timestamp& timestamp,
-                                  const signature& sign, const string owner_key, const string active_key );
+                          const public_key& active_key, const asset& min_account_stake );
     };
     /** @}*/ // end of @defgroup remswap rem.swap
 } /// namespace eosio

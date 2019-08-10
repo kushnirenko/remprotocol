@@ -16,6 +16,7 @@ namespace eosio {
         require_auth( rampayer );
         swap_index swap_table( _self, get_first_receiver().value );
 
+        const asset create_account_fee = get_min_account_stake();
         check( quantity.is_valid(), "invalid quantity" );
         check( quantity.symbol == create_account_fee.symbol, "symbol precision mismatch" );
         check( quantity.amount > create_account_fee.amount, "the quantity must be greater "
@@ -43,25 +44,25 @@ namespace eosio {
                 s.txid = txid;
                 s.swap_hash = swap_hash;
                 s.swap_timestamp = timestamp;
-                s.status = static_cast<uint8_t>(swap_status::INITIALIZED);
-                is_bp ? s.provided_approvals.push_back( approval{ level, current_time_point() } ) : void();
+                s.status = static_cast<int8_t>(swap_status::INITIALIZED);
+                is_bp ? s.provided_approvals.push_back( level ) : void();
             });
         }
         else {
             check( is_bp, "authorization error" );
-            check( swap_hash_itr->status != static_cast<uint8_t>(swap_status::CANCELED), "swap already canceled" );
+            check( swap_hash_itr->status != static_cast<int8_t>(swap_status::CANCELED), "swap already canceled" );
 
-            const std::vector<approval>& approvals = swap_hash_itr->provided_approvals;
+            const std::vector<permission_level>& approvals = swap_hash_itr->provided_approvals;
             bool is_already_approved = std::find_if( approvals.begin(),
                                                      approvals.end(),
-                                                      [&](const approval& a)
-                                                     { return a.level == level; }
+                                                      [&](const permission_level& l)
+                                                     { return l == level; }
                                                      ) == approvals.end();
 
             check ( is_already_approved, "approval already exist" );
 
             swap_table.modify( *swap_hash_itr, rampayer, [&]( auto& s ) {
-                s.provided_approvals.push_back( approval{ level, current_time_point() } );
+                s.provided_approvals.push_back( level );
             });
         }
     }
@@ -104,7 +105,7 @@ namespace eosio {
 //        torewards.send( _self, create_account_fee );
 //        to_rewards( { 200000, core_symbol } );
         swap_table.modify( *swap_hash_itr, rampayer, [&]( auto& s ) {
-            s.status = static_cast<uint8_t>(swap_status::FINISHED);
+            s.status = static_cast<int8_t>(swap_status::FINISHED);
         });
 
     }
@@ -125,20 +126,20 @@ namespace eosio {
         auto swap_hash_idx = swap_table.get_index<"byhash"_n>();
         const auto swap_itr = swap_hash_idx.find( swap_hash );
 
-
         public_key owner_key = string_to_public_key( owner_pubkey_str );
         public_key active_key = string_to_public_key( active_pubkey_str );
         const asset create_account_fee = get_min_account_stake();
+        quantity.amount = quantity.amount - create_account_fee.amount;
+        _issue_tokens( quantity );
         create_user( receiver, owner_key, active_key, create_account_fee );
 
 //        eosiosystem::system_contract::torewards_action torewards("rem.system"_n, { get_self(), "active"_n });
 //        torewards.send( _self, create_account_fee );
 //        to_rewards( create_account_fee );
-//        quantity.amount = quantity.amount - create_account_fee.amount;
 
         _transfer( receiver, quantity );
         swap_table.modify( *swap_itr, rampayer, [&]( auto& s ) {
-            s.status = static_cast<uint8_t>(swap_status::FINISHED);
+            s.status = static_cast<int8_t>(swap_status::FINISHED);
         });
     }
 
@@ -162,12 +163,12 @@ namespace eosio {
         validate_swap( swap_hash );
         check( time_point_sec(current_time_point()) > swap_timepoint + swap_active_lifetime,
                "active swap lifetime not expired, wait one week" );
-        require_recipient( get_self() );
+
         _issue_tokens( quantity );
         _retire_tokens( quantity );
 
         swap_table.modify( *swap_hash_itr, rampayer, [&]( auto& s ) {
-            s.status = static_cast<uint8_t>(swap_status::CANCELED);
+            s.status = static_cast<int8_t>(swap_status::CANCELED);
         });
     }
 
@@ -187,12 +188,11 @@ namespace eosio {
 
         string sign_payload = (owner_key.size() == 0) ? receiver.to_string() + delimiter + payload :
                                                         receiver.to_string() + delimiter + owner_key + delimiter
-                                                        + active_key + payload;
+                                                        + active_key + delimiter + payload;
 
         public_key swap_pubkey = string_to_public_key( swap_pubkey_str );
         checksum256 digest = hash( sign_payload );
         assert_recover_key(digest, sign, swap_pubkey);
-//        public_key swap_pubkey = recover_key( digest, sign );
 
         string swap_payload = swap_pubkey_str + delimiter + payload;
         const checksum256 swap_hash = hash( swap_payload );
@@ -206,13 +206,12 @@ namespace eosio {
         const auto swap_hash_itr = swap_hash_idx.find( swap_hash );
 
         check( swap_hash_itr != swap_hash_idx.end(), "swap doesn't exist" );
-        check( swap_hash_itr->status != static_cast<uint8_t>(swap_status::CANCELED), "swap already canceled" );
-        check( swap_hash_itr->status != static_cast<uint8_t>(swap_status::FINISHED), "swap already finished" );
+        check( swap_hash_itr->status != static_cast<int8_t>(swap_status::CANCELED), "swap already canceled" );
+        check( swap_hash_itr->status != static_cast<int8_t>(swap_status::FINISHED), "swap already finished" );
 
         const time_point swap_timepoint = swap_hash_itr->swap_timestamp.to_time_point();
-        check( time_point_sec(current_time_point()) < swap_timepoint + swap_lifetime,
-               "swap lifetime expired" );
-//        check( is_swap_confirmed( swap_hash_itr->provided_approvals ), "not enough active approvals" );
+        check( time_point_sec(current_time_point()) < swap_timepoint + swap_lifetime, "swap lifetime expired" );
+        check( is_swap_confirmed( swap_hash_itr->provided_approvals ), "not enough active approvals" );
     }
 
     void swap::cleanup_expired_swaps() {
@@ -237,6 +236,7 @@ namespace eosio {
         {
             return;
         }
+        const asset create_account_fee = get_min_account_stake();
         check(quantity.symbol == create_account_fee.symbol, "symbol precision mismatch");
         check(quantity.amount > create_account_fee.amount, "the quantity must be greater than the "
                                                            "transfer ETH fee");
@@ -244,21 +244,22 @@ namespace eosio {
         check( (space_pos != string::npos), "not valid memo" );
 
         string chain_id = memo.substr( space_pos + 1 );
-        string eth_address = memo.substr( 0, space_pos );
+        string address = memo.substr( 0, space_pos );
+        check( address.size() > 0, "wrong address" );
+        check( chain_id.size() > 0, "wrong chain id" );
         _retire_tokens( quantity );
     }
 
     void swap::_transfer( const name& receiver, const asset& quantity) {
-//        swap_index swap_table( _self, get_first_receiver().value );
         action(
                 permission_level{ get_self(), "active"_n },
-                "rem.token"_n, "transfer"_n,
+                system_token_account, "transfer"_n,
                 std::make_tuple( _self, receiver, quantity, string("atomic-swap") )
         ).send();
     }
 
     void swap::create_user( const name& user, const public_key& owner_key,
-                            const public_key& active_key, const asset& create_account_fee ) {
+                            const public_key& active_key, const asset& min_account_stake ) {
 
         const key_weight owner_pubkey_weight{
                 .key = owner_key,
@@ -298,15 +299,15 @@ namespace eosio {
                 permission_level{ _self, "active"_n},
                 system_account,
                 "delegatebw"_n,
-                std::make_tuple(_self, user, create_account_fee, true)
+                std::make_tuple(_self, user, min_account_stake, true)
         ).send();
     }
 
-    bool swap::is_swap_confirmed( const std::vector<approval>& provided_approvals ) {
+    bool swap::is_swap_confirmed( const std::vector<permission_level>& provided_approvals ) {
         std::vector<name> _producers = get_active_producers();
         uint8_t quantity_active_appr = 0;
         for (const auto& appr: provided_approvals) {
-            auto prod_appr = std::find(_producers.begin(), _producers.end(), appr.level.actor);
+            auto prod_appr = std::find(_producers.begin(), _producers.end(), appr.actor);
             if ( prod_appr != _producers.end() ) {
                 ++quantity_active_appr;
             }
