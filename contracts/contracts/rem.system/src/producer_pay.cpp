@@ -26,7 +26,7 @@ namespace eosiosystem {
       int64_t amount_remained = amount;
       int64_t total_reward_distributed = 0;
       for (const auto& p: _gstate.last_schedule) {
-         check(p.second > 0, "pervote share is 0 or lower");
+         check(p.second >= 0, "pervote share is lower than zero");
          check(p.second < 1, "pervote share is 1 or greater");
          const auto reward = std::min(int64_t(amount * p.second), amount_remained);
          amount_remained -= reward;
