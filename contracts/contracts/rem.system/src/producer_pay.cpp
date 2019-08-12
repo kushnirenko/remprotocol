@@ -26,6 +26,8 @@ namespace eosiosystem {
       int64_t amount_remained = amount;
       int64_t total_reward_distributed = 0;
       for (const auto& p: _gstate.last_schedule) {
+         check(p.second > 0, "pervote share is 0 or lower");
+         check(p.second < 1, "pervote share is 1 or greater");
          const auto reward = std::min(int64_t(amount * p.second), amount_remained);
          amount_remained -= reward;
          total_reward_distributed += reward;
@@ -37,7 +39,7 @@ namespace eosiosystem {
             break;
          }
       }
-      check(total_reward_distributed <= amount, "distributed reward above the given amount");
+      check(total_reward_distributed <= amount, "distributed reward is above the given amount");
       return total_reward_distributed;
    }
 
@@ -280,6 +282,8 @@ namespace eosiosystem {
 
    void system_contract::torewards( const name& payer, const asset& amount ) {
       require_auth( payer );
+      check(amount.amount > 0, "amount must be positive");
+
       const auto to_per_stake_pay = amount.amount * 0.7; //TODO: move to constants section
       const auto to_per_vote_pay  = share_pervote_reward_between_producers(amount.amount * 0.2); //TODO: move to constants section
       const auto to_rem           = amount.amount - (to_per_stake_pay + to_per_vote_pay);
