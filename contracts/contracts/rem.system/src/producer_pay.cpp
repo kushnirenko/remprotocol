@@ -287,17 +287,15 @@ namespace eosiosystem {
       const auto to_per_stake_pay = amount.amount * 0.7; //TODO: move to constants section
       const auto to_per_vote_pay  = share_pervote_reward_between_producers(amount.amount * 0.2); //TODO: move to constants section
       const auto to_rem           = amount.amount - (to_per_stake_pay + to_per_vote_pay);
-      if( amount.amount > 0 ) {
-        token::transfer_action transfer_act{ token_account, { {_self, active_permission} } };
-        if( to_rem > 0 ) {
-           transfer_act.send( _self, saving_account, asset(to_rem, core_symbol()), "Remme Savings" );
-        }
-        if( to_per_stake_pay > 0 ) {
-           transfer_act.send( _self, spay_account, asset(to_per_stake_pay, core_symbol()), "fund per-stake bucket" );
-        }
-        if( to_per_vote_pay > 0 ) {
-           transfer_act.send( _self, vpay_account, asset(to_per_vote_pay, core_symbol()), "fund per-vote bucket" );
-        }
+      token::transfer_action transfer_act{ token_account, { {_self, active_permission} } };
+      if( to_rem > 0 ) {
+        transfer_act.send( _self, saving_account, asset(to_rem, core_symbol()), "Remme Savings" );
+      }
+      if( to_per_stake_pay > 0 ) {
+        transfer_act.send( _self, spay_account, asset(to_per_stake_pay, core_symbol()), "fund per-stake bucket" );
+      }
+      if( to_per_vote_pay > 0 ) {
+        transfer_act.send( _self, vpay_account, asset(to_per_vote_pay, core_symbol()), "fund per-vote bucket" );
       }
 
       _gstate.pervote_bucket          += to_per_vote_pay;
