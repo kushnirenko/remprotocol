@@ -72,6 +72,7 @@ class RemchainSwapContract:
                     "swap_timestamp": timestamp,
                 }, REM_SWAP_ACCOUNT, self.permission)
                 eosiop_arams = EosioParams(raw.params_actions_list, self.private_key)
+                print(eosiop_arams.trx_json)
                 net = NodeNetwork.push_transaction(eosiop_arams.trx_json)
                 print(net)
             except Exception as e:

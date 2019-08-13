@@ -45,5 +45,7 @@ def process_swaps(eth_provider, remnode, permission, private_key):
         permission,
         private_key,
     )
-
-    eth_swap_bot.process_swaps()
+    try:
+        eth_swap_bot.process_swaps()
+    except Exception as e:
+        print(str(e))
