@@ -18,7 +18,7 @@ from cli.constants import (
     REMCHAIN_TOKEN_ID,
     SHORT_POLLING_CONFIRMATION_INTERVAL,
     SHORT_POLLING_EVENTS_INTERVAL,
-    ETH_ID, REMCHAIN_ID, MAX_TX_QUERIES)
+    ETH_ID, REMCHAIN_ID, MAX_TX_QUERIES, WEB3_PING_INTERVAL)
 from cli.eth_swap_bot.interfaces import EthSwapBotInterface
 from cli.remchain_swap_contract.service import RemchainSwapContract
 
@@ -128,6 +128,9 @@ class EthSwapBot:
             print(event)
             self.handle_swap_request_event(event)
 
+    def ping_connection(self):
+        print('eth block number: ', self.web3.eth.blockNumber)
+
     def process_swaps(self):
         """
         Process swap requests.
@@ -145,7 +148,10 @@ class EthSwapBot:
             daemon=True
         )
         worker.start()
-        worker.join()
+
+        while True:
+            self.ping_connection()
+            sleep(WEB3_PING_INTERVAL)
 
     def manual_process_swap(self, **kwargs):
         """
