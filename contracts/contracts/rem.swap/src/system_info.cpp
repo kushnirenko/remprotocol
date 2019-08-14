@@ -2,8 +2,6 @@
  *  @copyright defined in eos/LICENSE.txt
  */
 
-#include <eosio/singleton.hpp>
-
 #include <rem.swap/rem.swap.hpp>
 
 namespace eosio {
@@ -65,6 +63,11 @@ namespace eosio {
         return { static_cast<int64_t>( _gstate.min_account_stake ), core_symbol };
     }
 
+    asset swap::get_producers_reward() {
+        swapfee_index swapfee_table(_self, _self.value);
+        return swapfee_table.get_or_default(swapfee{}).producers_reward;
+    }
+
     bool swap::is_block_producer( const name& user ) {
         producers_table _producers_table( system_account, system_account.value );
         return _producers_table.find( user.value ) != _producers_table.end();
@@ -77,5 +80,31 @@ namespace eosio {
             producers.push_back( _table_itr->owner );
         }
         return producers;
+    }
+
+    bool swap::is_swap_confirmed( const std::vector<permission_level>& provided_approvals ) {
+        std::vector<name> _producers = get_active_producers();
+        uint8_t quantity_active_appr = 0;
+        for (const auto& appr: provided_approvals) {
+            auto prod_appr = std::find(_producers.begin(), _producers.end(), appr.actor);
+            if ( prod_appr != _producers.end() ) {
+                ++quantity_active_appr;
+            }
+        }
+        const uint8_t majority = (_producers.size() * 2 / 3) + 1;
+        if ( majority <= quantity_active_appr ) { return true; }
+        return false;
+    }
+
+    string swap::join( std::vector<string>&& vec, string delim ) {
+        return std::accumulate(std::next(vec.begin()), vec.end(), vec[0],
+                               [&delim](string& a, string& b) {
+                                   return a + delim + b;
+                               });
+    }
+
+    void swap::check_pubkey_pre(const string& pubkey_str) {
+        string pubkey_pre = pubkey_str.substr(0, 3);
+        check(pubkey_pre == "EOS" || pubkey_pre == "REM", "invalid type of public key");
     }
 }
