@@ -26,6 +26,7 @@ moc_*
 genesis.json
 hardfork.hpp
 block_producer_swap_bot/config.ini
+block_producer_swap_bot/swap_env
 
 libraries/utilities/git_revision.cpp
 libraries/egenesis/egenesis_brief.cpp
