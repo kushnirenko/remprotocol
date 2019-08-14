@@ -17,6 +17,8 @@ from cli.utils import (
     get_swap_private_key
 )
 
+from cli.setup_logger import logger
+
 
 @click.group('eth-swap-bot', chain=True)
 def eth_swap_bot_commands():
@@ -48,4 +50,4 @@ def process_swaps(eth_provider, remnode, permission, private_key):
     try:
         eth_swap_bot.process_swaps()
     except Exception as e:
-        print(str(e))
+        logger.error("Exception occurred", exc_info=True)

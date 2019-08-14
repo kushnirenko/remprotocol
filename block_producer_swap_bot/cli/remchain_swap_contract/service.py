@@ -14,6 +14,8 @@ from eosiopy.nodenetwork import NodeNetwork
 from eosiopy.rawinputparams import RawinputParams
 from eosiopy import eosio_config
 
+from cli.setup_logger import logger
+
 
 class RemchainSwapContract:
     """
@@ -72,10 +74,9 @@ class RemchainSwapContract:
                     "swap_timestamp": timestamp,
                 }, REM_SWAP_ACCOUNT, self.permission)
                 eosiop_arams = EosioParams(raw.params_actions_list, self.private_key)
-                print(eosiop_arams.trx_json)
                 net = NodeNetwork.push_transaction(eosiop_arams.trx_json)
-                print(net)
+                logger.info(net)
             except Exception as e:
-                print(str(e))
+                logger.error("Exception occurred", exc_info=True)
                 sleep(WAIT_FOR_REM_NODE_TIME)
             break

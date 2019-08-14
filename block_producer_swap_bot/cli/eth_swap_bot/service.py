@@ -3,7 +3,6 @@ Provide implementation of the eth_swap_bot.
 """
 import time
 from datetime import datetime
-from threading import Thread
 from time import sleep
 
 from accessify import implements
@@ -18,9 +17,11 @@ from cli.constants import (
     REMCHAIN_TOKEN_ID,
     SHORT_POLLING_CONFIRMATION_INTERVAL,
     SHORT_POLLING_EVENTS_INTERVAL,
-    ETH_ID, REMCHAIN_ID, MAX_TX_QUERIES, WEB3_PING_INTERVAL)
+    ETH_ID, REMCHAIN_ID, MAX_TX_QUERIES, WAIT_FOR_ETH_NODE
+)
 from cli.eth_swap_bot.interfaces import EthSwapBotInterface
 from cli.remchain_swap_contract.service import RemchainSwapContract
+from cli.setup_logger import logger
 
 
 @implements(EthSwapBotInterface)
@@ -42,17 +43,19 @@ class EthSwapBot:
         self.remnode = remnode
         self.permission = permission
 
-        self.web3 = Web3(Web3.WebsocketProvider(eth_provider))
-
-        self.eth_swap_contract = self.web3.eth.contract(
-            address=ETH_SWAP_CONTRACT_ADDRESS,
-            abi=ETH_SWAP_CONTRACT_ABI
-        )
-
         self.remchain_swap_contract = RemchainSwapContract(
             remnode=self.remnode,
             permission=self.permission,
             private_key=private_key,
+        )
+
+    def reload_web3(self):
+        self.web3 = Web3(Web3.WebsocketProvider(self.eth_provider))
+
+    def reload_eth_swap_contract(self):
+        self.eth_swap_contract = self.web3.eth.contract(
+            address=ETH_SWAP_CONTRACT_ADDRESS,
+            abi=ETH_SWAP_CONTRACT_ABI
         )
 
     @staticmethod
@@ -110,6 +113,7 @@ class EthSwapBot:
             if tx and (self.web3.eth.blockNumber - tx.get('blockNumber') > ETH_CONFIRMATION_BLOCKS):
                 if result['chain_id'] == REMCHAIN_ID:
                     self.remchain_swap_contract.init(**result)
+                self.last_processed_block = self.get_event_block_number(event)
                 break
             else:
                 sleep(SHORT_POLLING_CONFIRMATION_INTERVAL)
@@ -118,40 +122,41 @@ class EthSwapBot:
         while True:
             for event in event_filter.get_new_entries():
                 self.wait_for_event_confirmation(event)
-                print(event)
+                logger.info(event)
                 self.handle_swap_request_event(event)
             time.sleep(poll_interval)
 
     def sync_swaps_loop(self, event_filter):
         for event in event_filter.get_all_entries():
             self.wait_for_event_confirmation(event)
-            print(event)
+            logger.info(event)
             self.handle_swap_request_event(event)
 
-    def ping_connection(self):
-        print('eth block number: ', self.web3.eth.blockNumber)
+    def reload_event_filter(self):
+        if hasattr(self, 'last_processed_block'):
+            from_block = self.last_processed_block - 1
+        else:
+            from_block = self.web3.eth.blockNumber - ETH_EVENTS_WINDOW_LENGTH
+        self.request_swap_event_filter = self.eth_swap_contract.events.SwapRequest.createFilter(
+            fromBlock=from_block, toBlock='latest',
+        )
 
     def process_swaps(self):
         """
         Process swap requests.
         """
-        from_block = self.web3.eth.blockNumber - ETH_EVENTS_WINDOW_LENGTH
-        request_swap_event_filter = self.eth_swap_contract.events.SwapRequest.createFilter(
-            fromBlock=from_block, toBlock='latest',
-        )
-
-        self.sync_swaps_loop(request_swap_event_filter)
-
-        worker = Thread(
-            target=self.new_swaps_loop,
-            args=(request_swap_event_filter, SHORT_POLLING_EVENTS_INTERVAL),
-            daemon=True
-        )
-        worker.start()
-
         while True:
-            self.ping_connection()
-            sleep(WEB3_PING_INTERVAL)
+            try:
+                self.reload_web3()
+                self.reload_eth_swap_contract()
+                self.reload_event_filter()
+
+                self.sync_swaps_loop(self.request_swap_event_filter)
+                self.new_swaps_loop(self.request_swap_event_filter, SHORT_POLLING_EVENTS_INTERVAL)
+            except Exception as e:
+                logger.error("Exception occurred", exc_info=True)
+                sleep(WAIT_FOR_ETH_NODE)
+                continue
 
     def manual_process_swap(self, **kwargs):
         """
