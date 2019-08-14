@@ -23,14 +23,19 @@ namespace eosiosystem {
 
    int64_t system_contract::share_pervote_reward_between_producers(int64_t amount)
    {
+      int64_t amount_remained = amount;
       int64_t total_reward_distributed = 0;
       for (const auto& p: _gstate.last_schedule) {
-         const auto reward = int64_t(amount * p.second);
+         const auto reward = std::min(int64_t(amount * p.second), amount_remained);
+         amount_remained -= reward;
          total_reward_distributed += reward;
          const auto& prod = _producers.get(p.first.value);
          _producers.modify(prod, eosio::same_payer, [&](auto& p) {
             p.pending_pervote_reward += reward;
          });
+         if (amount_remained == 0) {
+            break;
+         }
       }
       check(total_reward_distributed <= amount, "distributed reward above the given amount");
       return total_reward_distributed;
@@ -281,13 +286,13 @@ namespace eosiosystem {
       if( amount.amount > 0 ) {
         token::transfer_action transfer_act{ token_account, { {_self, active_permission} } };
         if( to_rem > 0 ) {
-           transfer_act.send( _self, saving_account, asset(to_rem, core_symbol()), "Remme Savings" );
+           transfer_act.send( payer, saving_account, asset(to_rem, core_symbol()), "Remme Savings" );
         }
         if( to_per_stake_pay > 0 ) {
-           transfer_act.send( _self, spay_account, asset(to_per_stake_pay, core_symbol()), "fund per-stake bucket" );
+           transfer_act.send( payer, spay_account, asset(to_per_stake_pay, core_symbol()), "fund per-stake bucket" );
         }
         if( to_per_vote_pay > 0 ) {
-           transfer_act.send( _self, vpay_account, asset(to_per_vote_pay, core_symbol()), "fund per-vote bucket" );
+           transfer_act.send( payer, vpay_account, asset(to_per_vote_pay, core_symbol()), "fund per-vote bucket" );
         }
       }
 
