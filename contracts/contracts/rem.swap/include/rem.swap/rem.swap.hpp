@@ -170,6 +170,7 @@ namespace eosio {
       static constexpr name system_token_account = "rem.token"_n;
 
       const string remchain_id = "93ece941df27a5787a405383a66a7c26d04e80182adf504365710331ac0625a7";
+      const string ethchain_id = "ethropsten";
 
       const time_point swap_lifetime = time_point(seconds(15552000)); // 180 days
       const time_point swap_active_lifetime = time_point(seconds(604800)); // 7 days
@@ -200,7 +201,7 @@ namespace eosio {
       };
 
       struct [[eosio::table]] prodsreward {
-         asset quantity{50, core_symbol};
+         asset quantity{500000, core_symbol};
 
          // explicit serialization macro is not necessary, used here only to improve compilation time
          EOSLIB_SERIALIZE( prodsreward, (quantity) )
@@ -262,13 +263,15 @@ namespace eosio {
       }
 
       void to_rewards( const asset& quantity );
-      void retire_tokens( const asset& quantity );
+      void retire_tokens( const asset& quantity, const string& memo );
       void transfer( const name& receiver, const asset& quantity );
       void issue_tokens( const asset& quantity );
       void create_user( const name& user, const public_key& owner_key,
                         const public_key& active_key, const asset& min_account_stake );
 
       void validate_swap( const checksum256& swap_hash );
+      void validate_chain_id( string chain_id );
+      void validate_address( const string& address );
       void validate_pubkey( const signature& sign, const checksum256& digest, const string& swap_pubkey_str );
       void update_swaps( const name& rampayer, const asset& quantity );
 

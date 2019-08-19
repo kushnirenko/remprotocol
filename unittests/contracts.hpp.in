@@ -32,6 +32,7 @@ namespace eosio {
          // Contracts in `eos/unittests/contracts' directory
          MAKE_READ_WASM_ABI(rem_bios,   rem.bios, ../contracts/contracts)
          MAKE_READ_WASM_ABI(rem_msig,   rem.msig, ../contracts/contracts)
+         MAKE_READ_WASM_ABI(rem_swap,   rem.swap, ../contracts/contracts)
          MAKE_READ_WASM_ABI(rem_system, rem.system, ../contracts/contracts)
          MAKE_READ_WASM_ABI(rem_token,  rem.token,  ../contracts/contracts)
          MAKE_READ_WASM_ABI(rem_wrap,   rem.wrap,   ../contracts/contracts)

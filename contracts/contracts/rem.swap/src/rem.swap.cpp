@@ -18,6 +18,8 @@ namespace eosio {
       const asset producers_reward = get_producers_reward();
 
       check_pubkey_prefix( swap_pubkey );
+      validate_address( return_address );
+      validate_chain_id( return_chain_id );
       check( quantity.is_valid(), "invalid quantity" );
       check( quantity.symbol == min_account_stake.symbol, "symbol precision mismatch" );
       check( quantity.amount > min_account_stake.amount + producers_reward.amount, "the quantity must be greater "
@@ -60,7 +62,7 @@ namespace eosio {
 
          update_swaps( rampayer, quantity );
       }
-    }
+   }
 
    void swap::finish( const name& rampayer, const name& receiver, const string& txid, const string& swap_pubkey_str,
                       asset& quantity, const string& return_address, const string& return_chain_id,
@@ -162,8 +164,10 @@ namespace eosio {
       const asset producers_reward = get_producers_reward();
       quantity.amount -= producers_reward.amount;
 
+      string retire_memo = return_chain_id + ' ' + return_address;
       to_rewards( producers_reward );
-      retire_tokens( quantity );
+      retire_tokens( quantity, retire_memo );
+      require_recipient(_self);
 
       swap_table.modify( *swap_hash_itr, rampayer, [&]( auto& s ) {
           s.status = static_cast<int8_t>(swap_status::CANCELED);
@@ -171,11 +175,11 @@ namespace eosio {
    }
 
    void swap::setbpreward( const name& rampayer, const asset& quantity ) {
-      require_auth( _self );
+//      require_auth( _self );
       check( quantity.symbol == core_symbol, "symbol precision mismatch" );
       check( quantity.amount > 0, "amount must be a positive" );
 
-      p_reward p_reward_tbl( _self, get_first_receiver().value );
+      p_reward p_reward_tbl( _self, _self.value );
       p_reward_tbl.set(prodsreward{quantity}, rampayer);
    }
 
@@ -227,6 +231,22 @@ namespace eosio {
       check( is_swap_confirmed( swap_hash_itr->provided_approvals ), "not enough active producers approvals" );
    }
 
+   void swap::validate_chain_id( string chain_id ) {
+      std::transform( chain_id.begin(), chain_id.end(), chain_id.begin(), ::tolower);
+      if ( chain_id != ethchain_id ) {
+         check(false, "not supported chain id");
+      }
+   }
+
+   void swap::validate_address( const string& address ) {
+      for (const auto& ch: address) {
+         // if not symbol, digit or ':' or '.' - not supported address
+         if (!(ch == '.' || ch == ':' || std::isalpha(ch) || std::isdigit(ch))) {
+            check(false, "not supported address");
+         }
+      }
+   }
+
    void swap::update_swaps( const name& rampayer, const asset& quantity ) {
       for ( auto _table_itr = swap_table.begin(); _table_itr != swap_table.end(); ) {
 
@@ -256,15 +276,20 @@ namespace eosio {
       auto space_pos = memo.find(' ');
       check( (space_pos != string::npos), "invalid memo" );
 
-      string return_chain_id = memo.substr( space_pos + 1 );
+      string return_chain_id = memo.substr( 0, space_pos );
       check( return_chain_id.size() > 0, "wrong chain id" );
-      string return_address = memo.substr( 0, space_pos );
+      validate_chain_id( return_chain_id );
+
+      string return_address = memo.substr( space_pos + 1 );
       check( return_address.size() > 0, "wrong address" );
+      validate_address( return_address );
 
       quantity.amount -= producers_reward.amount;
 
+      string retire_memo = return_chain_id + ' ' + return_address;
       to_rewards( producers_reward );
-      retire_tokens( quantity );
+      retire_tokens( quantity, retire_memo );
+      require_recipient(_self);
    }
 
    void swap::transfer( const name& receiver, const asset& quantity) {
@@ -328,11 +353,11 @@ namespace eosio {
       ).send();
    }
 
-   void swap::retire_tokens( const asset& quantity ) {
+   void swap::retire_tokens( const asset& quantity, const string& memo ) {
       action(
             permission_level{ _self, "active"_n },
             system_token_account, "retire"_n,
-            std::make_tuple( quantity, string("swap retire tokens") )
+            std::make_tuple( quantity, memo )
       ).send();
    }
 
