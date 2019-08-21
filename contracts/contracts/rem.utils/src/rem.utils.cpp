@@ -8,9 +8,9 @@
 
 namespace eosio {
    utils::utils(name receiver, name code,  datastream<const char*> ds): contract(receiver, code, ds),
-                                                                 swap_fee_table(_self, _self.value) {
+   swap_fee_table(_self, _self.value) {
    if ( swap_fee_table.begin() == swap_fee_table.end() ) {
-      add_chain(supported_chain.at("ETH"), asset{500000, core_symbol});
+      add_chain(supported_chains.at("ETH"), asset{500000, core_symbol});
       }
    }
 
@@ -18,7 +18,7 @@ namespace eosio {
       auto it = swap_fee_table.find( chain_id.value );
       check(it != swap_fee_table.end(), "not supported chain id");
 
-      if ( supported_chain.at("ETH").value == chain_id.value ) {
+      if ( supported_chains.at("ETH").value == chain_id.value ) {
          validate_eth_address(address);
       } else {
          check(false, "not supported chain id");
