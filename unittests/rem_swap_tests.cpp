@@ -14,7 +14,9 @@
 
 #include <contracts.hpp>
 
+#include <chrono>
 #include <functional>
+#include <thread>
 #include <numeric>
 #include <set>
 
@@ -31,6 +33,8 @@ using namespace eosio::testing;
 using namespace fc;
 
 using mvo = fc::mutable_variant_object;
+using namespace std::this_thread;
+using namespace std::chrono_literals;
 
 struct rem_genesis_account {
    account_name name;
@@ -327,7 +331,7 @@ swap_tester::swap_tester() {
    for( const auto& producer : producer_candidates ) {
       register_producer(producer);
    }
-   // set permission code
+   // set permission @rem.code to rem.swap
    updateauth(N(rem.swap));
 }
 
@@ -352,17 +356,28 @@ try {
                                  init_swap_data.return_chain_id, std::to_string( swap_timepoint.sec_since_epoch() ) } );
    string swap_id = fc::sha256::hash( swap_payload );
 
-   init_swap( init_swap_data.rampayer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
-   init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp );
+   auto before_init_balance = get_balance(N(rem.swap));
 
-   setbpreward( init_swap_data.rampayer, init_swap_data.quantity );
+   init_swap( N(rem.swap), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+              init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp );
 
    auto data = get_swap_info(N(swaps), "swap_data");
+   BOOST_REQUIRE_EQUAL("0", data["status"].as_string());
+
+   for( const auto& producer : producer_candidates ) {
+      init_swap( producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                 init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp );
+   }
+
+   auto after_init_balance = get_balance(N(rem.swap));
+
+   data = get_swap_info(N(swaps), "swap_data");
    BOOST_REQUIRE_EQUAL(init_swap_data.txid, data["txid"].as_string());
    BOOST_REQUIRE_EQUAL(swap_id, data["swap_id"].as_string());
    BOOST_REQUIRE_EQUAL(swap_timestamp, data["swap_timestamp"].as_string());
-   BOOST_REQUIRE_EQUAL("0", data["status"].as_string());
+   BOOST_REQUIRE_EQUAL("1", data["status"].as_string());
    BOOST_REQUIRE_EQUAL("proda", data["provided_approvals"].get_array()[0].as_string());
+   BOOST_REQUIRE_EQUAL(before_init_balance + init_swap_data.quantity, after_init_balance);
 
    // action's authorizing actor 'fail' does not exist
    BOOST_REQUIRE_THROW(init_swap( N(fail), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
@@ -379,7 +394,7 @@ try {
                                   eosio_assert_message_exception);
    // the quantity must be greater than the swap fee
    BOOST_REQUIRE_THROW(init_swap( init_swap_data.rampayer, init_swap_data.txid, init_swap_data.swap_pubkey,
-                                  asset::from_string("250.0000 REM"), init_swap_data.return_address,
+                                  asset::from_string("25.0000 REM"), init_swap_data.return_address,
                                   init_swap_data.return_chain_id, init_swap_data.swap_timestamp),
                                   eosio_assert_message_exception);
    // swap lifetime expired
@@ -400,11 +415,11 @@ try {
                                   init_swap_data.swap_timestamp), eosio_assert_message_exception);
    // not supported address
    BOOST_REQUIRE_THROW(init_swap( N(rem.swap), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
-                                  " ", init_swap_data.return_chain_id,
+                                  "/&%$#!@)(|<>_-+=", init_swap_data.return_chain_id,
                                   init_swap_data.swap_timestamp), eosio_assert_message_exception);
    // not supported address
    BOOST_REQUIRE_THROW(init_swap( N(rem.swap), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
-                                  "/&%$#!@)(|<>_-+=", init_swap_data.return_chain_id,
+                                  init_swap_data.return_address, "/&%$#!@)(|<>_-+=",
                                   init_swap_data.swap_timestamp), eosio_assert_message_exception);
    } FC_LOG_AND_RETHROW()
 }
@@ -414,6 +429,8 @@ try {
 
    string swap_timestamp = "2020-01-01T00:00:00.000";
    name receiver = N(prodb);
+   uint8_t majority = ( producer_candidates.size() * 2 / 3 ) + 1;
+   asset producers_reward = _core_from_string("50.0000");
    init_data init_swap_data = {
            .rampayer = N(proda),
            .txid = "79b9563d89da12715c2ea086b38a5557a521399c87d40d84b8fa5df0fd478046",
@@ -442,9 +459,74 @@ try {
    string sign_str = "SIG_K1_JucDm1qudEDHzYCaJhSWKUPDSCgEkezCnKBJH9ma9WDafeV1SG9hEViyyeriHBH129QHJX74eJdSS62vFiSMqivqnttGLk";
    fc::crypto::signature sign(sign_str);
 
+   auto receiver_before_balance = get_balance(receiver);
+   auto remswap_before_balance = get_balance(N(rem.swap));
 
-   finish_swap( N(proda), receiver, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
-                 init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp, sign );
+   finish_swap( init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp, sign );
+
+   auto receiver_after_balance = get_balance(receiver);
+   auto remswap_after_balance = get_balance(N(rem.swap));
+
+   auto data = get_swap_info(N(swaps), "swap_data");
+   BOOST_REQUIRE_EQUAL(swap_id, data["swap_id"].as_string());
+   BOOST_REQUIRE_EQUAL("2", data["status"].as_string());
+   BOOST_TEST( majority <= data["provided_approvals"].get_array().size() );
+   BOOST_REQUIRE_EQUAL(receiver_before_balance + init_swap_data.quantity - producers_reward, receiver_after_balance);
+   BOOST_REQUIRE_EQUAL(remswap_before_balance - init_swap_data.quantity, remswap_after_balance);
+
+   // swap already finished
+   BOOST_REQUIRE_THROW(finish_swap( init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey,
+                                    init_swap_data.quantity, init_swap_data.return_address, init_swap_data.return_chain_id,
+                                    init_swap_data.swap_timestamp, sign ),
+                                    eosio_assert_message_exception);
+   // swap has to be canceled after expiration
+   BOOST_REQUIRE_THROW(finish_swap( init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey,
+                                    init_swap_data.quantity, init_swap_data.return_address, init_swap_data.return_chain_id,
+                                    fc::time_point_sec::from_iso_string("2019-12-01T00:00:00.000"), sign ),
+                                    eosio_assert_message_exception);
+   // swap doesn't exist
+   BOOST_REQUIRE_THROW(finish_swap( init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey,
+                                    _core_from_string("500.0000"), init_swap_data.return_address,
+                                    init_swap_data.return_chain_id, init_swap_data.swap_timestamp, sign ),
+                                    eosio_assert_message_exception);
+
+   swap_timepoint = fc::time_point_sec::from_iso_string("2019-07-05T00:00:43.000");
+
+   init_swap( init_swap_data.rampayer, init_swap_data.txid, init_swap_data.swap_pubkey, _core_from_string("250.0000"),
+              init_swap_data.return_address, init_swap_data.return_chain_id, swap_timepoint );
+
+   sign_str = "SIG_K1_K2yu6nrzAPrS9pXsaHZfrp4h4yUYRRn9wkaP9cd9mmvTXcixFHyq7s9FqqjhYKbJQnUjYSEdzaUgzKHNiSqVrPBhVyu7xk";
+   fc::crypto::signature _sign(sign_str);
+
+   BOOST_REQUIRE_THROW(finish_swap( init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey,
+                                    _core_from_string("250.0000"), init_swap_data.return_address,
+                                    init_swap_data.return_chain_id, swap_timepoint, _sign ),
+                                    eosio_assert_message_exception);
+
+//   finish_swap( init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey,
+//                _core_from_string("250.0000"), init_swap_data.return_address,
+//                init_swap_data.return_chain_id, swap_timepoint, _sign );
+
+   sign_payload = join( { receiver.to_string(), init_swap_data.txid, REMCHAIN_ID, _core_from_string("250.0000").to_string(),
+                          init_swap_data.return_address, init_swap_data.return_chain_id,
+                          std::to_string( swap_timepoint.sec_since_epoch() ) } );
+
+   swap_digest = fc::sha256::hash( sign_payload );
+//   BOOST_TEST_MESSAGE( sign_payload );
+//   sign_str = "SIG_K1_K2yu6nrzAPrS9pXs aHZfrp4h4yUYRRn9wkaP9cd9mmvTXcixFHyq7s9FqqjhYKbJQnUjYSEdzaUgzKHNiSqVrPBhVyu7xk";
+//   fc::crypto::signature _sign(sign_str);
+
+   // swap lifetime expired
+//   BOOST_REQUIRE_THROW(finish_swap( init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey,
+//                                    _core_from_string("250.0000"), init_swap_data.return_address,
+//                                    init_swap_data.return_chain_id, swap_timepoint, _sign ),
+//                                    eosio_assert_message_exception);
+//   sleep_for(10s);
+
+//   finish_swap( init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey,
+//                _core_from_string("250.0000"), init_swap_data.return_address,
+//                init_swap_data.return_chain_id, swap_timepoint, _sign );
 
    } FC_LOG_AND_RETHROW()
 }

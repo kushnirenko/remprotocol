@@ -80,7 +80,6 @@ namespace eosio {
               return_address, return_chain_id, swap_timestamp
       );
 
-      validate_pubkey( sign, digest, swap_pubkey_str );
       validate_swap( swap_hash );
 
       auto swap_hash_idx = swap_table.get_index<"byhash"_n>();
@@ -118,7 +117,6 @@ namespace eosio {
             return_chain_id, swap_timestamp
       );
 
-      validate_pubkey( sign, digest, swap_pubkey_str );
       validate_swap( swap_hash );
 
       auto swap_hash_idx = swap_table.get_index<"byhash"_n>();
