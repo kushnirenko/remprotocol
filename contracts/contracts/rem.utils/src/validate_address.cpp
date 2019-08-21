@@ -5,12 +5,12 @@
 #include <rem.utils/rem.utils.hpp>
 
 namespace eosio {
-   void utils::validate_eth_address( string address ){
+   void utils::validate_eth_address( string address ) {
       if ( address.substr(0, 2) == "0x" ) { address = address.substr(2); }
 
       check( address.size() == 40, "invalid address length" );
       for (const auto& ch: address) {
-         check(std::isxdigit(ch), "invalid symbol in ethereum address");
+         check(std::isxdigit(ch), "invalid hex symbol in ethereum address");
       }
    }
 

@@ -7,7 +7,6 @@
 #include <eosio/asset.hpp>
 #include <eosio/eosio.hpp>
 
-#include <vector>
 #include <map>
 #include <string>
 
@@ -16,7 +15,7 @@ namespace eosio {
    using std::string;
 
    /**
-    * @defgroup eosiosystem rem.utils
+    * @defgroup eosioutils rem.utils
     * @ingroup eosiocontracts
     *
     * rem.utils contract
@@ -80,5 +79,5 @@ namespace eosio {
       void validate_eth_address( string address );
       void add_chain( const name& chain_id, const asset& fee );
    };
-   /** @}*/ // end of @defgroup remswap rem.utils
+   /** @}*/ // end of @defgroup eosioutils rem.utils
 } /// namespace eosio

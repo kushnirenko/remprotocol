@@ -20,8 +20,6 @@ namespace eosio {
 
       if ( supported_chains.at("ETH").value == chain_id.value ) {
          validate_eth_address(address);
-      } else {
-         check(false, "not supported chain id");
       }
    }
 
