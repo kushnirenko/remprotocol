@@ -210,7 +210,6 @@ namespace eosiosystem {
     */
    struct [[eosio::table, eosio::contract("rem.system")]] producer_info {
       name                  owner;
-      double                total_votes = 0;
       eosio::public_key     producer_key; /// a packed public key object
       bool                  is_active = true;
       std::string           url;
@@ -222,16 +221,23 @@ namespace eosiosystem {
       int64_t               pending_pervote_reward = 0;
       time_point            last_claim_time;
       uint16_t              location = 0;
+      uint16_t              dummy = 0;
 
-      uint64_t primary_key()const { return owner.value;                             }
-      double   by_votes()const    { return is_active ? -total_votes : total_votes;  }
-      bool     active()const      { return is_active;                               }
-      void     deactivate()       { producer_key = public_key(); is_active = false; }
+      uint64_t primary_key()const { return owner.value;                                       }
+      double   by_votes()const    { return active() ? -get_total_votes() : get_total_votes(); }
+      bool     active()const      { return is_active;                                         }
+      void     deactivate()       { producer_key = public_key(); is_active = false;           }
+
+      double get_total_votes() const;
+      void change_votes_by( double value );
 
       // explicit serialization macro is not necessary, used here only to improve compilation time
-      EOSLIB_SERIALIZE( producer_info, (owner)(total_votes)(producer_key)(is_active)(url)
+      EOSLIB_SERIALIZE( producer_info, (owner)(producer_key)(is_active)(url)
                         (current_round_unpaid_blocks)(unpaid_blocks)(expected_produced_blocks)(last_expected_produced_blocks_update)
-                        (pending_perstake_reward)(pending_pervote_reward)(last_claim_time)(location) )
+                        (pending_perstake_reward)(pending_pervote_reward)(last_claim_time)(location)(dummy)(total_votes)(votes_timestamp) )
+   private:
+      double total_votes = 0.0;
+      time_point votes_timestamp;
    };
 
    /**

@@ -512,11 +512,10 @@ BOOST_FIXTURE_TEST_CASE( rem_vote_weight_test, voting_tester ) {
          // voteproducer was done at:     1577836844500000
          // 180 days in microseconds is:  15552000000000
 
-         // eos weight: ~20.057692;
          // rem weight: ~0.000002;
          // staked:     399999999000
          const auto prod = get_producer_info( "proda" );
-         BOOST_TEST_REQUIRE( 1031774.2926451379 == prod["total_votes"].as_double() );
+         BOOST_TEST_REQUIRE( 51440.329067638711 == prod["total_votes"].as_double() );
       }
 
       // Day 30
@@ -528,7 +527,7 @@ BOOST_FIXTURE_TEST_CASE( rem_vote_weight_test, voting_tester ) {
          // rem weight: ~0.170384;
          // staked:     399999999000
          const auto prod = get_producer_info( "proda" );
-         BOOST_TEST_REQUIRE( 1372237214636.8337 == prod["total_votes"].as_double() );
+         BOOST_TEST_REQUIRE( 68153137689.699478 == prod["total_votes"].as_double() );
       }
 
       // Day 180
@@ -540,7 +539,7 @@ BOOST_FIXTURE_TEST_CASE( rem_vote_weight_test, voting_tester ) {
          // rem weight: 1.000000;
          // staked:     399999999000
          const auto prod = get_producer_info( "proda" );
-         BOOST_TEST_REQUIRE( 8223076902519.2305 == prod["total_votes"].as_double() );
+         BOOST_TEST_REQUIRE( 399999999000 == prod["total_votes"].as_double() );
       }
 
       // Day 180 (0)
@@ -558,7 +557,7 @@ BOOST_FIXTURE_TEST_CASE( rem_vote_weight_test, voting_tester ) {
          // rem weight: 0.666667;
          // staked:     599999999000
          const auto prod = get_producer_info( "proda" );
-         BOOST_TEST_REQUIRE( 8223077702492.6377 == prod["total_votes"].as_double() );
+         BOOST_TEST_REQUIRE( 400000037913.5802 == prod["total_votes"].as_double() );
       }
 
       // Day 210 (30)
@@ -578,7 +577,7 @@ BOOST_FIXTURE_TEST_CASE( rem_vote_weight_test, voting_tester ) {
          // rem weight: 0.625;
          // staked:     799999999000
          const auto prod = get_producer_info( "proda" );
-         BOOST_TEST_REQUIRE( 10363317352113.912 == prod["total_votes"].as_double() );
+         BOOST_TEST_REQUIRE( 502229731882.50092 == prod["total_votes"].as_double() );
       }
    } FC_LOG_AND_RETHROW()
 }

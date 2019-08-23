@@ -66,7 +66,6 @@ namespace eosiosystem {
       } else {
          _producers.emplace( producer, [&]( producer_info& info ){
             info.owner           = producer;
-            info.total_votes     = 0;
             info.producer_key    = producer_key;
             info.is_active       = true;
             info.url             = url;
@@ -121,7 +120,7 @@ namespace eosiosystem {
 
       // TODO rewrite in algorithm terms
       // TODO check if we can rely on producer_info::active()
-      for ( auto it = idx.cbegin(); it != idx.cend() && top_producers.size() < 21 && 0 < it->total_votes && it->active(); ++it ) {
+      for ( auto it = idx.cbegin(); it != idx.cend() && top_producers.size() < 21 && 0 < it->get_total_votes() && it->active(); ++it ) {
          top_producers.emplace_back( std::pair<eosio::producer_key,uint16_t>({{it->owner, it->producer_key}, it->location}) );
       }
 
@@ -148,9 +147,7 @@ namespace eosiosystem {
 
       const auto seconds_to_mature = fmax( (locked_stake_period - current_time_point()).to_seconds(), 0.0 );
       const auto rem_weight = 1.0 - seconds_to_mature / _gstate.stake_lock_period.to_seconds();
-      const double weight = int64_t((current_time_point().sec_since_epoch() - (block_timestamp::block_timestamp_epoch / 1000)) / (seconds_per_day * 7)) / double(52);
-
-      const auto vote_weight = double(staked) * weight * rem_weight;
+      const auto vote_weight = double(staked) * rem_weight;
       
       check( vote_weight >= 0.0, "vote weight cannot be negative" );
       return vote_weight;
@@ -247,18 +244,15 @@ namespace eosiosystem {
             if( voting && !pitr->active() && pd.second.second /* from new set */ ) {
                check( false, ( "producer " + pitr->owner.to_string() + " is not currently registered" ).data() );
             }
-            const auto total_votes_before = pitr->total_votes;
+            const auto total_votes_before = pitr->get_total_votes();
             _producers.modify( pitr, same_payer, [&]( auto& p ) {
-               p.total_votes += pd.second.first;
-               if ( p.total_votes < 0 ) { // floating point arithmetics can give small negative numbers
-                  p.total_votes = 0;
-               }
+               p.change_votes_by( std::max( pd.second.first, 0.0 ) ); // floating point arithmetics can give small negative numbers
                _gstate.total_producer_vote_weight += pd.second.first;
             });
             const auto active_prod = std::find_if(std::begin(_gstate.last_schedule), std::end(_gstate.last_schedule),
                [target = pd.first](const auto& prod){ return prod.first.value == target.value; });
             if (active_prod != std::end(_gstate.last_schedule)) {
-               _gstate.total_active_producer_vote_weight += pitr->total_votes - total_votes_before;
+               _gstate.total_active_producer_vote_weight += pitr->get_total_votes() - total_votes_before;
             }
          } else {
             if( pd.second.second ) {
@@ -315,9 +309,8 @@ namespace eosiosystem {
             auto delta = new_weight - voter.last_vote_weight;
             for ( auto acnt : voter.producers ) {
                auto& prod = _producers.get( acnt.value, "producer not found" ); //data corruption
-               const double init_total_votes = prod.total_votes;
                _producers.modify( prod, same_payer, [&]( auto& p ) {
-                  p.total_votes += delta;
+                  p.change_votes_by( delta );
                   _gstate.total_producer_vote_weight += delta;
                });
                const auto active_prod = std::find_if(std::begin(_gstate.last_schedule), std::end(_gstate.last_schedule),

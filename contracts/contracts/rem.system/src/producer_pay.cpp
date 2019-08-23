@@ -45,7 +45,7 @@ namespace eosiosystem {
          {
             const auto& prod_name = p.first;
             const auto& prod = _producers.get(prod_name.value);
-            const double share = prod.total_votes / _gstate.total_active_producer_vote_weight;
+            const double share = prod.get_total_votes() / _gstate.total_active_producer_vote_weight;
             // need to cut precision because sum of all shares can be greater that 1 due to floating point arithmetics
             p.second = std::floor(share * 100000.0) / 100000.0;
          });
@@ -129,7 +129,7 @@ namespace eosiosystem {
             const auto& prod_name = active_producers[i];
             const auto& prod = _producers.get(prod_name.value);
             _gstate.last_schedule[i] = std::make_pair(prod_name, 0.0);
-            _gstate.total_active_producer_vote_weight += prod.total_votes;
+            _gstate.total_active_producer_vote_weight += prod.get_total_votes();
             _producers.modify(prod, same_payer, [&](auto& p) {
                p.last_expected_produced_blocks_update = timestamp;
             });
