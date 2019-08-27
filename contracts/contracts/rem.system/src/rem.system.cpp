@@ -366,7 +366,6 @@ namespace eosiosystem {
 
    double producer_info::get_total_votes() const {
       const auto days_since_last_recalculation = (eosio::current_time_point() - votes_timestamp).to_seconds() / eosio::days(1).to_seconds();
-      // eosio::print("days_since_last_recalculation: ", days_since_last_recalculation, "\n");
 
       // 0.996199 is a positive root of equation x^182 = 0.5 <- total votes halves decay in half year
       return total_votes * pow(0.996199, days_since_last_recalculation);

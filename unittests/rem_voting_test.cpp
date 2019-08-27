@@ -512,6 +512,7 @@ BOOST_FIXTURE_TEST_CASE( rem_vote_weight_test, voting_tester ) {
          // voteproducer was done at:     1577836844500000
          // 180 days in microseconds is:  15552000000000
 
+         // eos weight: ~20.057692;
          // rem weight: ~0.000002;
          // staked:     399999999000
          const auto prod = get_producer_info( "proda" );
@@ -661,4 +662,36 @@ BOOST_FIXTURE_TEST_CASE( stake_lock_period_test, voting_tester ) {
       unregister_producer( N(proda) );
    } FC_LOG_AND_RETHROW()
 }
+
+BOOST_FIXTURE_TEST_CASE(total_votes_test, voting_tester) {
+   try {
+      const auto producers = {N(b1), N(proda), N(prodb), N(whale1), N(whale2), N(whale3)};
+      for (const auto &producer : producers) {
+         register_producer(producer);
+      }
+
+      for (const auto &producer : producers) {
+         votepro(producer, {N(proda), N(prodb)});
+      }
+
+      produce_min_num_of_blocks_to_spend_time_wo_inactive_prod( fc::days(180) );
+      for (const auto &producer : producers) {
+         votepro(producer, {N(proda), N(prodb)});
+      }
+
+      auto proda = get_producer_info( N(proda) );
+      auto prodb = get_producer_info( N(proda) );
+      BOOST_REQUIRE_EQUAL( proda["total_votes"].as_double(), prodb["total_votes"].as_double() );
+      BOOST_REQUIRE_EQUAL( 190'999'999'4000LL, proda["total_votes"].as_double() );
+      BOOST_REQUIRE_EQUAL( 190'999'999'4000LL, prodb["total_votes"].as_double() );
+
+      auto votera = get_voter_info( N(proda) );
+      auto voterb = get_voter_info( N(prodb) );
+      BOOST_REQUIRE_EQUAL( votera["last_vote_weight"].as_double(), voterb["last_vote_weight"].as_double() );
+      BOOST_REQUIRE_EQUAL( 499'999'9000LL, votera["last_vote_weight"].as_double() );
+      BOOST_REQUIRE_EQUAL( 499'999'9000LL, voterb["last_vote_weight"].as_double() );      
+   }
+   FC_LOG_AND_RETHROW()
+}
+
 BOOST_AUTO_TEST_SUITE_END()

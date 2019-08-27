@@ -229,7 +229,7 @@ namespace eosiosystem {
       void     deactivate()       { producer_key = public_key(); is_active = false;           }
 
       double get_total_votes() const;
-      void change_votes_by( double value );
+      void change_votes_by( double delta );
 
       // explicit serialization macro is not necessary, used here only to improve compilation time
       EOSLIB_SERIALIZE( producer_info, (owner)(producer_key)(is_active)(url)
