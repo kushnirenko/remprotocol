@@ -43,18 +43,19 @@ namespace eosio {
          (last_producer_schedule_size)(total_producer_vote_weight)(total_active_producer_vote_weight)(last_name_close) )
    };
 
-   struct [[eosio::table, eosio::contract("rem.system")]] producer_info2 {
-      name            owner;
-      double          votepay_share = 0;
-      time_point      last_votepay_share_update;
+   // TODO: delete this when rem.utils will be merge and rem.utils.hpp include
+   struct [[eosio::table]] swap_fee {
+     name chain;
+     asset fee;
 
-      uint64_t primary_key()const { return owner.value; }
+     uint64_t primary_key()const { return chain.value; }
 
-      // explicit serialization macro is not necessary, used here only to improve compilation time
-      EOSLIB_SERIALIZE( producer_info2, (owner)(votepay_share)(last_votepay_share_update) )
+     // explicit serialization macro is not necessary, used here only to improve compilation time
+     EOSLIB_SERIALIZE( swap_fee, (chain)(fee))
    };
 
-   typedef eosio::multi_index< "producers2"_n, producer_info2 > producers_table;
+   typedef multi_index< "swapfee"_n, swap_fee> swap_fee_index;
+   //
    typedef eosio::singleton< "global"_n, eosio_global_state >   global_state_singleton;
 
    asset swap::get_min_account_stake() {
@@ -63,27 +64,20 @@ namespace eosio {
       return { static_cast<int64_t>( _gstate.min_account_stake ), core_symbol };
    }
 
-   asset swap::get_producers_reward() {
-      p_reward p_reward_tbl(_self, _self.value);
-      return p_reward_tbl.get_or_default(prodsreward{}).quantity;
+   asset swap::get_swapbot_fee(const name &chain_id) {
+      swap_fee_index swap_fee("rem.utils"_n, "rem.utils"_n.value);
+      auto fee_itr = swap_fee.find(chain_id.value);
+      check(fee_itr != swap_fee.end(), "chain not supported");
+      return fee_itr->fee;
    }
 
    bool swap::is_block_producer( const name& user ) {
-      producers_table _producers_table( system_account, system_account.value );
-      return _producers_table.find( user.value ) != _producers_table.end();
-   }
-
-   vector<name> swap::get_active_producers() {
-      producers_table _producers_table( system_account, system_account.value );
-      vector<name> producers;
-      for ( auto _table_itr = _producers_table.begin(); _table_itr != _producers_table.end(); ++_table_itr ) {
-         producers.push_back( _table_itr->owner );
-      }
-      return producers;
+      vector<name> _producers = eosio::get_active_producers();
+      return std::find(_producers.begin(), _producers.end(), user) != _producers.end();
    }
 
    bool swap::is_swap_confirmed( const vector<name>& provided_approvals ) {
-      vector<name> _producers = get_active_producers();
+      vector<name> _producers = eosio::get_active_producers();
       uint8_t quantity_active_appr = 0;
       for (const auto& producer: provided_approvals) {
          auto prod_appr = std::find(_producers.begin(), _producers.end(), producer);
@@ -92,8 +86,12 @@ namespace eosio {
          }
       }
       const uint8_t majority = (_producers.size() * 2 / 3) + 1;
+      // TODO: uncomment this when swap bot will be in 2/3+1 prods
       if ( majority <= quantity_active_appr ) { return true; }
          return false;
+//      if ( 2 <= quantity_active_appr) { return true; }
+//
+//      return false;
    }
 
    string swap::join( vector<string>&& vec, string delim ) {

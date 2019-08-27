@@ -1,6 +1,16 @@
 add_contract(rem.swap rem.swap ${CMAKE_CURRENT_SOURCE_DIR}/src/rem.swap.cpp)
 
 target_include_directories(rem.swap
+        PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../rem.system/include)
+
+target_include_directories(rem.swap
+        PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../rem.token/include)
+
+target_include_directories(rem.swap
    PUBLIC
    ${CMAKE_CURRENT_SOURCE_DIR}/include)
 

@@ -26,29 +26,16 @@
 #define TESTER validating_tester
 #endif
 
-
 using namespace eosio;
 using namespace eosio::chain;
 using namespace eosio::testing;
 using namespace fc;
 
-using mvo = fc::mutable_variant_object;
-using namespace std::this_thread;
-using namespace std::chrono_literals;
+using mvo = mutable_variant_object;
 
 struct rem_genesis_account {
    account_name name;
-   uint64_t     initial_balance;
-};
-
-struct init_data {
-   name rampayer;
-   string txid;
-   string swap_pubkey;
-   asset quantity;
-   string return_address;
-   string return_chain_id;
-   block_timestamp_type swap_timestamp;
+   uint64_t initial_balance;
 };
 
 std::vector<rem_genesis_account> genesis_test( {
@@ -83,23 +70,33 @@ std::vector<rem_genesis_account> genesis_test( {
 });
 
 const auto producer_candidates = {
-        N(proda), N(prodb), N(prodc), N(prodd), N(prode), N(prodf), N(prodg),
-        N(prodh), N(prodi), N(prodj), N(prodk), N(prodl), N(prodm), N(prodn),
-        N(prodo), N(prodp), N(prodq), N(prodr), N(prods), N(prodt), N(produ)
+   N(proda), N(prodb), N(prodc), N(prodd), N(prode), N(prodf), N(prodg),
+   N(prodh), N(prodi), N(prodj), N(prodk), N(prodl), N(prodm), N(prodn),
+   N(prodo), N(prodp), N(prodq), N(prodr), N(prods), N(prodt), N(produ)
 };
 
-const char* SYMBOL_CORE_NAME = "REM";
-const std::string REMCHAIN_ID = "93ece941df27a5787a405383a66a7c26d04e80182adf504365710331ac0625a7";
+const char *SYMBOL_CORE_NAME = "REM";
+symbol CORE_SYMBOL_STR(4, SYMBOL_CORE_NAME);
+uint32_t majority = (producer_candidates.size() * 2 / 3) + 1;
+const string REMCHAIN_ID = "93ece941df27a5787a405383a66a7c26d04e80182adf504365710331ac0625a7";
 
-eosio::chain::asset _core_from_string(const std::string& s) {
-   return eosio::chain::asset::from_string(s + " " + SYMBOL_CORE_NAME);
+asset _core_from_string(const string &s) {
+   return asset::from_string(s + " " + SYMBOL_CORE_NAME);
 }
 
-symbol CORE_SYMBOL_STR(4, SYMBOL_CORE_NAME);
+struct init_data {
+   name rampayer = N(proda);
+   string txid = "79b9563d89da12715c2ea086b38a5557a521399c87d40d84b8fa5df0fd478046";
+   string swap_pubkey;
+   asset quantity = _core_from_string("201.0000");
+   string return_address = "9f21f19180c8692ebaa061fd231cd1b029ff2326";
+   string return_chain_id = "ethropsten";
+   block_timestamp_type swap_timestamp;
+};
 
-string join( vector<string>&& vec, string delim = string("*") ) {
+string join(vector<string> &&vec, string delim = string("*")) {
    return std::accumulate(std::next(vec.begin()), vec.end(), vec[0],
-                          [&delim](string& a, string& b) {
+                          [&delim](string &a, string &b) {
                              return a + delim + b;
                           });
 }
@@ -108,94 +105,145 @@ class swap_tester : public TESTER {
 public:
    swap_tester();
 
-   void deploy_contract( bool call_init = true ) {
-      set_code( config::system_account_name, contracts::rem_system_wasm() );
-      set_abi( config::system_account_name, contracts::rem_system_abi().data() );
-      if( call_init ) {
+   void deploy_contract(bool call_init = true) {
+      set_code(config::system_account_name, contracts::rem_system_wasm());
+      set_abi(config::system_account_name, contracts::rem_system_abi().data());
+      if (call_init) {
          base_tester::push_action(config::system_account_name, N(init),
-                                  config::system_account_name,  mutable_variant_object()
-                                          ("version", 0)
-                                          ("core", CORE_SYMBOL_STR)
+                                  config::system_account_name, mutable_variant_object()
+                                     ("version", 0)
+                                     ("core", CORE_SYMBOL_STR)
          );
       }
    }
 
-   auto delegate_bandwidth( name from, name receiver, asset stake_quantity, uint8_t transfer = 1) {
+   auto delegate_bandwidth(name from, name receiver, asset stake_quantity, uint8_t transfer = 1) {
       auto r = base_tester::push_action(config::system_account_name, N(delegatebw), from, mvo()
-              ("from", from )
-              ("receiver", receiver)
-              ("stake_quantity", stake_quantity)
-              ("transfer", transfer)
+         ("from", from)
+         ("receiver", receiver)
+         ("stake_quantity", stake_quantity)
+         ("transfer", transfer)
       );
       produce_block();
       return r;
    }
 
-   void create_currency( name contract, name manager, asset maxsupply, const private_key_type* signer = nullptr ) {
-      auto act =  mutable_variant_object()
-              ("issuer",       manager )
-              ("maximum_supply", maxsupply );
-
-      base_tester::push_action(contract, N(create), contract, act );
-   }
-
-   auto issue( name contract, name manager, name to, asset amount ) {
-      auto r = base_tester::push_action( contract, N(issue), manager, mutable_variant_object()
-              ("to",      to )
-              ("quantity", amount )
-              ("memo", "")
+   auto transfer(const name& from, const name& to, const asset& quantity, const string& memo) {
+      auto r = base_tester::push_action(N(rem.token), N(transfer), from, mvo()
+         ("from", from)
+         ("to", to)
+         ("quantity", quantity)
+         ("memo", memo)
       );
       produce_block();
       return r;
    }
 
-   auto set_privileged( name account ) {
-      auto r = base_tester::push_action(config::system_account_name, N(setpriv), config::system_account_name,  mvo()("account", account)("is_priv", 1));
+   void create_currency(name contract, name manager, asset maxsupply, const private_key_type *signer = nullptr) {
+      auto act = mutable_variant_object()
+         ("issuer", manager)
+         ("maximum_supply", maxsupply);
+
+      base_tester::push_action(contract, N(create), contract, act);
+   }
+
+   auto issue(name contract, name manager, name to, asset amount) {
+      auto r = base_tester::push_action(contract, N(issue), manager, mutable_variant_object()
+         ("to", to)
+         ("quantity", amount)
+         ("memo", "")
+      );
       produce_block();
       return r;
    }
 
-   auto init_swap( const name& rampayer, const string& txid, const string& swap_pubkey,
-                   const asset& quantity, const string& return_address, const string& return_chain_id,
-                   const block_timestamp_type& swap_timestamp ) {
+   auto set_privileged(name account) {
+      auto r = base_tester::push_action(config::system_account_name, N(setpriv), config::system_account_name,
+                                        mvo()("account", account)("is_priv", 1));
+      produce_block();
+      return r;
+   }
+
+   auto init_swap(const name &rampayer, const string &txid, const string &swap_pubkey,
+                  const asset &quantity, const string &return_address, const string &return_chain_id,
+                  const block_timestamp_type &swap_timestamp) {
 
       auto r = base_tester::push_action(N(rem.swap), N(init), rampayer, mvo()
-              ("rampayer",  name(rampayer))
-              ("txid",  txid)
-              ("swap_pubkey",  swap_pubkey)
-              ("quantity",  quantity)
-              ("return_address",  return_address)
-              ("return_chain_id",  return_chain_id)
-              ("swap_timestamp",  swap_timestamp)
+         ("rampayer", name(rampayer))
+         ("txid", txid)
+         ("swap_pubkey", swap_pubkey)
+         ("quantity", quantity)
+         ("return_address", return_address)
+         ("return_chain_id", return_chain_id)
+         ("swap_timestamp", swap_timestamp)
       );
       produce_block();
       return r;
    }
 
-   auto finish_swap( const name& rampayer, const name& receiver, const string& txid, const string& swap_pubkey,
-                     const asset& quantity, const string& return_address, const string& return_chain_id,
-                     const block_timestamp_type& swap_timestamp, const fc::crypto::signature& sign ) {
+   auto cancel_swap(const name &rampayer, const string &txid, const string &swap_pubkey,
+                    const asset &quantity, const string &return_address, const string &return_chain_id,
+                    const block_timestamp_type &swap_timestamp) {
+
+      auto r = base_tester::push_action(N(rem.swap), N(cancel), rampayer, mvo()
+         ("rampayer", name(rampayer))
+         ("txid", txid)
+         ("swap_pubkey_str", swap_pubkey)
+         ("quantity", quantity)
+         ("return_address", return_address)
+         ("return_chain_id", return_chain_id)
+         ("swap_timestamp", swap_timestamp)
+      );
+      produce_block();
+      return r;
+   }
+
+   auto finish_swap(const name &rampayer, const name &receiver, const string &txid, const string &swap_pubkey,
+                    const asset &quantity, const string &return_address, const string &return_chain_id,
+                    const block_timestamp_type &swap_timestamp, const crypto::signature &sign) {
 
       auto r = base_tester::push_action(N(rem.swap), N(finish), rampayer, mvo()
-              ("rampayer",  name(rampayer))
-              ("receiver",  name(receiver))
-              ("txid",  txid)
-              ("swap_pubkey_str",  swap_pubkey)
-              ("quantity",  quantity)
-              ("return_address",  return_address)
-              ("return_chain_id",  return_chain_id)
-              ("swap_timestamp",  swap_timestamp)
-              ("sign",  sign)
+         ("rampayer", name(rampayer))
+         ("receiver", name(receiver))
+         ("txid", txid)
+         ("swap_pubkey_str", swap_pubkey)
+         ("quantity", quantity)
+         ("return_address", return_address)
+         ("return_chain_id", return_chain_id)
+         ("swap_timestamp", swap_timestamp)
+         ("sign", sign)
       );
       produce_block();
       return r;
    }
 
-   auto setbpreward( const name& rampayer, const asset& quantity ) {
+   auto finish_swap_new_account(const name &rampayer, const name &receiver, const string &owner_pubkey_str,
+                                const string &active_pubkey_str, const string &txid, const string &swap_pubkey,
+                                const asset &quantity, const string &return_address, const string &return_chain_id,
+                                const block_timestamp_type &swap_timestamp, const crypto::signature &sign) {
+
+      auto r = base_tester::push_action(N(rem.swap), N(finishnewacc), rampayer, mvo()
+         ("rampayer", name(rampayer))
+         ("receiver", name(receiver))
+         ("owner_pubkey_str", owner_pubkey_str)
+         ("active_pubkey_str", active_pubkey_str)
+         ("txid", txid)
+         ("swap_pubkey_str", swap_pubkey)
+         ("quantity", quantity)
+         ("return_address", return_address)
+         ("return_chain_id", return_chain_id)
+         ("swap_timestamp", swap_timestamp)
+         ("sign", sign)
+      );
+      produce_block();
+      return r;
+   }
+
+   auto setbpreward(const name &rampayer, const asset &quantity) {
 
       auto r = base_tester::push_action(N(rem.swap), N(setbpreward), rampayer, mvo()
-              ("rampayer",  name(rampayer))
-              ("quantity",  quantity)
+         ("rampayer", name(rampayer))
+         ("quantity", quantity)
       );
       produce_block();
       return r;
@@ -203,63 +251,94 @@ public:
 
    auto register_producer(name producer) {
       auto r = base_tester::push_action(config::system_account_name, N(regproducer), producer, mvo()
-              ("producer",  name(producer))
-              ("producer_key", get_public_key( producer, "active" ) )
-              ("url", "" )
-              ("location", 0 )
+         ("producer", name(producer))
+         ("producer_key", get_public_key(producer, "active"))
+         ("url", "")
+         ("location", 0)
       );
       produce_block();
       return r;
    }
 
-   auto updateauth(const name& account) {
-      auto auth = authority(eosio::testing::base_tester::get_public_key(account.to_string(), "active"));
-      auth.accounts.push_back( permission_level_weight{{account, config::rem_code_name}, 1} );
-
-      auto r = base_tester::push_action( N(rem), N(updateauth), account, mvo()
-              ( "account", account.to_string())
-              ( "permission", "active" )
-              ( "parent", "owner" )
-              ( "auth", auth )
+   void votepro(account_name voter, vector<account_name> producers) {
+      std::sort( producers.begin(), producers.end() );
+      base_tester::push_action(config::system_account_name, N(voteproducer), voter, mvo()
+         ("voter", name(voter))
+         ("proxy", name(0) )
+         ("producers", producers)
       );
-      produce_blocks( 2 );
+      produce_blocks();
+   };
+
+   auto updateauth(const name &account) {
+      auto auth = authority(testing::base_tester::get_public_key(account.to_string(), "active"));
+      auth.accounts.push_back(permission_level_weight{{account, config::rem_code_name}, 1});
+
+      auto r = base_tester::push_action(N(rem), N(updateauth), account, mvo()
+         ("account", account.to_string())
+         ("permission", "active")
+         ("parent", "owner")
+         ("auth", auth)
+      );
+      produce_blocks();
       return r;
    }
 
-   fc::variant get_swap_info(const name& table, const string& type) {
+   variant get_singtable(const name& contract, const name &table, const string &type) {
       vector<char> data;
-      const auto& db = control->db();
-      const auto* t_id = db.find<chain::table_id_object, chain::by_code_scope_table>( boost::make_tuple( N(rem.swap), N(rem.swap), table ) );
-      if ( !t_id ) {
-         return fc::variant();
+      const auto &db = control->db();
+      const auto *t_id = db.find<table_id_object, by_code_scope_table>(
+         boost::make_tuple(contract, contract, table));
+      if (!t_id) {
+         return variant();
       }
 
-      const auto& idx = db.get_index<chain::key_value_index, chain::by_scope_primary>();
+      const auto &idx = db.get_index<key_value_index, by_scope_primary>();
 
-      auto itr = idx.upper_bound( boost::make_tuple( t_id->id, std::numeric_limits<uint64_t>::max() ));
-      if ( itr == idx.begin() ) {
-         return fc::variant();
+      auto itr = idx.upper_bound(boost::make_tuple(t_id->id, std::numeric_limits<uint64_t>::max()));
+      if (itr == idx.begin()) {
+         return variant();
       }
       --itr;
-      if ( itr->t_id != t_id->id ) {
-         return fc::variant();
+      if (itr->t_id != t_id->id) {
+         return variant();
       }
 
-      data.resize( itr->value.size() );
-      memcpy( data.data(), itr->value.data(), data.size() );
-      return data.empty() ? fc::variant() : abi_ser.binary_to_variant( type, data, abi_serializer_max_time );
+      data.resize(itr->value.size());
+      memcpy(data.data(), itr->value.data(), data.size());
+      return data.empty() ? variant() : abi_ser.binary_to_variant(type, data, abi_serializer_max_time);
    }
 
-   asset get_balance( const account_name& act ) {
+   asset get_balance(const account_name &act) {
       return get_currency_balance(N(rem.token), CORE_SYMBOL_STR, act);
    }
 
-   void set_code_abi(const account_name& account, const vector<uint8_t>& wasm, const char* abi, const private_key_type* signer = nullptr) {
+   asset get_producers_reward() {
+      asset producers_reward;
+      from_variant(get_singtable(N(rem.swap), N(prodsreward), "prodsreward")["quantity"], producers_reward);
+      return producers_reward;
+   }
+
+   asset get_min_account_stake() {
+      asset min_account_stake;
+      vector<char> data = get_row_by_account( config::system_account_name, config::system_account_name, N(global), N(global) );
+      from_variant(abi_ser.binary_to_variant( "eosio_global_state", data, abi_serializer_max_time )["min_account_stake"],
+                   min_account_stake);
+      return min_account_stake;
+   }
+
+   string get_pubkey_str(const crypto::private_key& priv_key) {
+      crypto::public_key pub_key = priv_key.get_public_key();
+      return string(pub_key);
+   }
+
+   void set_code_abi(const account_name &account, const vector<uint8_t> &wasm, const char *abi,
+                     const private_key_type *signer = nullptr) {
       wdump((account));
       set_code(account, wasm, signer);
       set_abi(account, abi, signer);
       if (account == N(rem.swap)) {
-         const auto& accnt = control->db().get<account_object,by_name>( account );
+         const auto &accnt = control->db().get<account_object, by_name>(account);
          abi_def abi_definition;
          BOOST_REQUIRE_EQUAL(abi_serializer::to_abi(accnt.abi, abi_definition), true);
          abi_ser.set_abi(abi_definition, abi_serializer_max_time);
@@ -272,12 +351,16 @@ public:
 
 swap_tester::swap_tester() {
    // Create rem.msig, rem.token and rem.swap
-   create_accounts({N(rem.msig), N(rem.token), N(rem.ram), N(rem.ramfee), N(rem.stake), N(rem.bpay), N(rem.spay), N(rem.vpay), N(rem.saving), N(rem.swap) });
+   create_accounts(
+      {N(rem.msig), N(rem.token), N(rem.ram), N(rem.ramfee), N(rem.stake), N(rem.bpay), N(rem.spay), N(rem.vpay),
+       N(rem.saving), N(rem.swap)});
 
    // Set code for the following accounts:
    //  - rem (code: rem.bios) (already set by tester constructor)
    //  - rem.msig (code: rem.msig)
    //  - rem.token (code: rem.token)
+   //  - rem.swap (code: rem.swap)
+   //  - rem.utils (code: rem.utils)
    set_code_abi(N(rem.msig),
                 contracts::rem_msig_wasm(),
                 contracts::rem_msig_abi().data());//, &rem_active_pk);
@@ -287,26 +370,32 @@ swap_tester::swap_tester() {
    set_code_abi(N(rem.swap),
                 contracts::rem_swap_wasm(),
                 contracts::rem_swap_abi().data()); //, &rem_active_pk);
+//   set_code_abi(N(rem.utils),
+//                contracts::rem_utils_wasm(),
+//                contracts::rem_utils_abi().data()); //, &rem_active_pk);
 
-   // Set privileged for rem.msig and rem.token
+   // Set privileged for rem.msig, rem.token, rem.swap
    set_privileged(N(rem.msig));
    set_privileged(N(rem.token));
    set_privileged(N(rem.swap));
+//   set_privileged(N(rem.utils));
 
-   // Verify rem.msig and rem.token is privileged
-   const auto& rem_msig_acc = get<account_metadata_object, by_name>(N(rem.msig));
+   // Verify rem.msig, rem.token, rem.swap is privileged
+   const auto &rem_msig_acc = get<account_metadata_object, by_name>(N(rem.msig));
    BOOST_TEST(rem_msig_acc.is_privileged() == true);
-   const auto& rem_token_acc = get<account_metadata_object, by_name>(N(rem.token));
+   const auto &rem_token_acc = get<account_metadata_object, by_name>(N(rem.token));
    BOOST_TEST(rem_token_acc.is_privileged() == true);
-   const auto& rem_swap_acc = get<account_metadata_object, by_name>(N(rem.swap));
+   const auto &rem_swap_acc = get<account_metadata_object, by_name>(N(rem.swap));
    BOOST_TEST(rem_swap_acc.is_privileged() == true);
+//   const auto &rem_utils_acc = get<account_metadata_object, by_name>(N(rem.utils));
+//   BOOST_TEST(rem_utils_acc.is_privileged() == true);
 
-   // Create SYS tokens in rem.token, set its manager as rem
-   const auto max_supply     = _core_from_string("1000000000.0000"); /// 10x larger than 1B initial tokens
+   // Create REM tokens in rem.token, set its manager as rem.swap
+   const auto max_supply = _core_from_string("1000000000.0000"); /// 10x larger than 1B initial tokens
    const auto initial_supply = _core_from_string("100000000.0000");  /// 10x larger than 1B initial tokens
 
    create_currency(N(rem.token), N(rem.swap), max_supply);
-   // Issue the genesis supply of 1 billion SYS tokens to rem.system
+   // Issue the genesis supply of 1 billion REM tokens to rem.swap
    issue(N(rem.token), N(rem.swap), N(rem.swap), initial_supply);
 
    auto actual = get_balance(N(rem.swap));
@@ -314,220 +403,789 @@ swap_tester::swap_tester() {
    BOOST_REQUIRE_EQUAL(initial_supply, actual);
 
    // Create genesis accounts
-   for( const auto& account : genesis_test ) {
-      create_account( account.name, N(rem.swap) );
+   for (const auto &account : genesis_test) {
+      create_account(account.name, N(rem.swap));
    }
 
    deploy_contract();
 
    // Buy ram and stake cpu and net for each genesis accounts
-   for( const auto& account : genesis_test ) {
+   for (const auto &account : genesis_test) {
       const auto stake_quantity = account.initial_balance - 1000;
       const auto r = delegate_bandwidth(N(rem.stake), account.name, asset(stake_quantity, CORE_SYMBOL_STR));
-      BOOST_REQUIRE( !r->except_ptr );
+      BOOST_REQUIRE(!r->except_ptr);
    }
 
    // Register producers
-   for( const auto& producer : producer_candidates ) {
+   for (const auto &producer : producer_candidates) {
       register_producer(producer);
    }
+
+   const auto whales_as_producers = { N(b1), N(whale1), N(whale2) };
+   for( const auto& producer : whales_as_producers ) {
+      register_producer(producer);
+   }
+
+   votepro(N(whale1), { N(proda), N(prodb), N(prodc), N(prodd), N(prode), N(prodf), N(prodg),
+                        N(prodh), N(prodi), N(prodj), N(prodk), N(prodl), N(prodm), N(prodn),
+                        N(prodo), N(prodp), N(prodq), N(prodr), N(prods), N(prodt), N(produ) });
+   votepro( N(whale2), { N(proda), N(prodb), N(prodc), N(prodd), N(prode) } );
+   votepro( N(b1), { N(proda), N(prodb), N(prodc), N(prodd), N(prode) } );
    // set permission @rem.code to rem.swap
    updateauth(N(rem.swap));
 }
 
 BOOST_AUTO_TEST_SUITE(swap_tests)
 
-BOOST_FIXTURE_TEST_CASE( init_swap_test, swap_tester ) {
-try {
+BOOST_FIXTURE_TEST_CASE(init_swap_test, swap_tester) {
+   try {
+      init_data init_swap_data = {
+         .swap_pubkey = get_pubkey_str(crypto::private_key::generate()),
+         .swap_timestamp = time_point_sec(control->head_block_time())
+      };
+      /* swap id consist of swap_pubkey, txid, remchain_id, quantity, return_address,
+       * return_chain_id, swap_timepoint_seconds and separated by '*'. */
+      time_point swap_timepoint = init_swap_data.swap_timestamp.to_time_point();
+      string swap_payload = join({ init_swap_data.swap_pubkey.substr(3), init_swap_data.txid, REMCHAIN_ID,
+                                  init_swap_data.quantity.to_string(), init_swap_data.return_address,
+                                  init_swap_data.return_chain_id, std::to_string(swap_timepoint.sec_since_epoch()) });
 
-   string swap_timestamp = "2020-01-01T00:00:00.000";
-   init_data init_swap_data = {
-           .rampayer = N(proda),
-           .txid = "79b9563d89da12715c2ea086b38a5557a521399c87d40d84b8fa5df0fd478046",
-           .swap_pubkey = "EOS5dorAyvqvG8znqAPjNGSsJsVf2eLv2xyv9veZAL5vseS2VVLsX",
-           .quantity = asset::from_string("201.0000 REM"),
-           .return_address = "9f21f19180c8692ebaa061fd231cd1b029ff2326",
-           .return_chain_id = "ethropsten",
-           .swap_timestamp = fc::time_point_sec::from_iso_string(swap_timestamp)
-   };
-   time_point swap_timepoint = init_swap_data.swap_timestamp.to_time_point();
-   string swap_payload = join( { init_swap_data.swap_pubkey.substr(3), init_swap_data.txid, REMCHAIN_ID,
-                                 init_swap_data.quantity.to_string(), init_swap_data.return_address,
-                                 init_swap_data.return_chain_id, std::to_string( swap_timepoint.sec_since_epoch() ) } );
-   string swap_id = fc::sha256::hash( swap_payload );
+      string swap_id = sha256::hash(swap_payload);
+      asset before_init_balance = get_balance(N(rem.swap));
 
-   auto before_init_balance = get_balance(N(rem.swap));
+      init_swap(N(rem.swap), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
 
-   init_swap( N(rem.swap), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
-              init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp );
+      // 0 if a swap status initialized
+      auto data = get_singtable(N(rem.swap), N(swaps), "swap_data");
+      BOOST_REQUIRE_EQUAL("0", data["status"].as_string());
 
-   auto data = get_swap_info(N(swaps), "swap_data");
-   BOOST_REQUIRE_EQUAL("0", data["status"].as_string());
+      // 21 approvals, tokens will be issued after 2/3 + 1 approvals
+      for (const auto &producer : producer_candidates) {
+         init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                   init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
+      }
 
-   for( const auto& producer : producer_candidates ) {
-      init_swap( producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
-                 init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp );
-   }
+      asset after_init_balance = get_balance(N(rem.swap));
 
-   auto after_init_balance = get_balance(N(rem.swap));
+      data = get_singtable(N(rem.swap), N(swaps), "swap_data");
+      BOOST_REQUIRE_EQUAL(init_swap_data.txid, data["txid"].as_string());
+      BOOST_REQUIRE_EQUAL(swap_id, data["swap_id"].as_string());
+      BOOST_REQUIRE_EQUAL(string(swap_timepoint), data["swap_timestamp"].as_string());
+      // 1 if a swap status issued
+      BOOST_REQUIRE_EQUAL("1", data["status"].as_string());
+      // after issue tokens, balance rem.swap should be a before issue balance + amount of tokens to be a swapped
+      BOOST_REQUIRE_EQUAL(before_init_balance + init_swap_data.quantity, after_init_balance);
 
-   data = get_swap_info(N(swaps), "swap_data");
-   BOOST_REQUIRE_EQUAL(init_swap_data.txid, data["txid"].as_string());
-   BOOST_REQUIRE_EQUAL(swap_id, data["swap_id"].as_string());
-   BOOST_REQUIRE_EQUAL(swap_timestamp, data["swap_timestamp"].as_string());
-   BOOST_REQUIRE_EQUAL("1", data["status"].as_string());
-   BOOST_REQUIRE_EQUAL("proda", data["provided_approvals"].get_array()[0].as_string());
-   BOOST_REQUIRE_EQUAL(before_init_balance + init_swap_data.quantity, after_init_balance);
-
-   // action's authorizing actor 'fail' does not exist
-   BOOST_REQUIRE_THROW(init_swap( N(fail), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
-                                  init_swap_data.return_address, init_swap_data.return_chain_id,
-                                  init_swap_data.swap_timestamp), transaction_exception);
-   // approval already exists
-   BOOST_REQUIRE_THROW(init_swap( init_swap_data.rampayer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
-                                  init_swap_data.return_address, init_swap_data.return_chain_id,
-                                  init_swap_data.swap_timestamp), eosio_assert_message_exception);
-   // symbol precision mismatch
-   BOOST_REQUIRE_THROW(init_swap( init_swap_data.rampayer, init_swap_data.txid, init_swap_data.swap_pubkey,
-                                  asset::from_string("201.0000 SYS"), init_swap_data.return_address,
-                                  init_swap_data.return_chain_id, init_swap_data.swap_timestamp),
-                                  eosio_assert_message_exception);
-   // the quantity must be greater than the swap fee
-   BOOST_REQUIRE_THROW(init_swap( init_swap_data.rampayer, init_swap_data.txid, init_swap_data.swap_pubkey,
-                                  asset::from_string("25.0000 REM"), init_swap_data.return_address,
-                                  init_swap_data.return_chain_id, init_swap_data.swap_timestamp),
-                                  eosio_assert_message_exception);
-   // swap lifetime expired
-   BOOST_REQUIRE_THROW(init_swap( init_swap_data.rampayer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
-                                  init_swap_data.return_address, init_swap_data.return_chain_id,
-                                  fc::time_point_sec::from_iso_string("2019-01-13T18:09:16.000")), eosio_assert_message_exception);
-   // block producer authorization required
-   BOOST_REQUIRE_THROW(init_swap( N(rem.swap), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
-                                  init_swap_data.return_address, init_swap_data.return_chain_id,
-                                  init_swap_data.swap_timestamp), eosio_assert_message_exception);
-   // not supported chain id
-   BOOST_REQUIRE_THROW(init_swap( N(rem.swap), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
-                                  init_swap_data.return_address, " ",
-                                  init_swap_data.swap_timestamp), eosio_assert_message_exception);
-   // not supported address
-   BOOST_REQUIRE_THROW(init_swap( N(rem.swap), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
-                                  " ", init_swap_data.return_chain_id,
-                                  init_swap_data.swap_timestamp), eosio_assert_message_exception);
-   // not supported address
-   BOOST_REQUIRE_THROW(init_swap( N(rem.swap), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
-                                  "/&%$#!@)(|<>_-+=", init_swap_data.return_chain_id,
-                                  init_swap_data.swap_timestamp), eosio_assert_message_exception);
-   // not supported address
-   BOOST_REQUIRE_THROW(init_swap( N(rem.swap), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
-                                  init_swap_data.return_address, "/&%$#!@)(|<>_-+=",
-                                  init_swap_data.swap_timestamp), eosio_assert_message_exception);
+      // action's authorizing actor 'fail' does not exist
+      BOOST_REQUIRE_THROW(
+         init_swap(N(fail), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                   init_swap_data.return_address, init_swap_data.return_chain_id,
+                   init_swap_data.swap_timestamp), transaction_exception);
+      // approval already exists
+      BOOST_REQUIRE_THROW(init_swap(init_swap_data.rampayer, init_swap_data.txid, init_swap_data.swap_pubkey,
+                                    init_swap_data.quantity,
+                                    init_swap_data.return_address, init_swap_data.return_chain_id,
+                                    init_swap_data.swap_timestamp), eosio_assert_message_exception);
+      // symbol precision mismatch
+      BOOST_REQUIRE_THROW(init_swap(init_swap_data.rampayer, init_swap_data.txid, init_swap_data.swap_pubkey,
+                                    asset::from_string("201.0000 SYS"), init_swap_data.return_address,
+                                    init_swap_data.return_chain_id, init_swap_data.swap_timestamp),
+                                    eosio_assert_message_exception);
+      // the quantity must be greater than the swap fee
+      BOOST_REQUIRE_THROW(init_swap(init_swap_data.rampayer, init_swap_data.txid, init_swap_data.swap_pubkey,
+                                    _core_from_string("25.0000"), init_swap_data.return_address,
+                                    init_swap_data.return_chain_id, init_swap_data.swap_timestamp),
+                                    eosio_assert_message_exception);
+      // swap lifetime expired
+      BOOST_REQUIRE_THROW(init_swap(init_swap_data.rampayer, init_swap_data.txid, init_swap_data.swap_pubkey,
+                                    init_swap_data.quantity,
+                                    init_swap_data.return_address, init_swap_data.return_chain_id,
+                                    time_point_sec::from_iso_string("2019-01-13T18:09:16.000")),
+                                    eosio_assert_message_exception);
+      // block producer authorization required
+      BOOST_REQUIRE_THROW(
+         init_swap(N(rem.swap), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                   init_swap_data.return_address, init_swap_data.return_chain_id,
+                   init_swap_data.swap_timestamp), eosio_assert_message_exception);
+         // TODO: uncomment this when rem.utils will be merged
+//      // not supported chain id
+//      BOOST_REQUIRE_THROW(
+//         init_swap(N(rem.swap), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+//                   init_swap_data.return_address, " ",
+//                   init_swap_data.swap_timestamp), eosio_assert_message_exception);
+//      // not supported address
+//      BOOST_REQUIRE_THROW(
+//         init_swap(N(rem.swap), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+//                   " ", init_swap_data.return_chain_id,
+//                   init_swap_data.swap_timestamp), eosio_assert_message_exception);
+//      // not supported address
+//      BOOST_REQUIRE_THROW(
+//         init_swap(N(rem.swap), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+//                   "/&%$#!@)(|<>_-+=", init_swap_data.return_chain_id,
+//                   init_swap_data.swap_timestamp), eosio_assert_message_exception);
+//      // not supported address
+//      BOOST_REQUIRE_THROW(
+//         init_swap(N(rem.swap), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+//                   init_swap_data.return_address, "/&%$#!@)(|<>_-+=",
+//                   init_swap_data.swap_timestamp), eosio_assert_message_exception);
    } FC_LOG_AND_RETHROW()
 }
 
-BOOST_FIXTURE_TEST_CASE( finish_swap_test, swap_tester ) {
-try {
+BOOST_FIXTURE_TEST_CASE(init_swap_after_cancel_test, swap_tester) {
+   try {
+      init_data init_swap_data = {
+         .swap_pubkey = get_pubkey_str(crypto::private_key::generate()),
+         // swap can be canceled after expiration (1 week)
+         .swap_timestamp = time_point_sec::from_iso_string("2019-12-05T00:00:43.000")
+      };
+      for (const auto &producer : producer_candidates) {
+         init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                   init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
+      }
+      cancel_swap(N(rem.swap), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                  init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
 
-   string swap_timestamp = "2020-01-01T00:00:00.000";
-   name receiver = N(prodb);
-   uint8_t majority = ( producer_candidates.size() * 2 / 3 ) + 1;
-   asset producers_reward = _core_from_string("50.0000");
-   init_data init_swap_data = {
-           .rampayer = N(proda),
-           .txid = "79b9563d89da12715c2ea086b38a5557a521399c87d40d84b8fa5df0fd478046",
-           .swap_pubkey = "EOS5dorAyvqvG8znqAPjNGSsJsVf2eLv2xyv9veZAL5vseS2VVLsX",
-           .quantity = asset::from_string("201.0000 REM"),
-           .return_address = "9f21f19180c8692ebaa061fd231cd1b029ff2326",
-           .return_chain_id = "ethropsten",
-           .swap_timestamp = fc::time_point_sec::from_iso_string(swap_timestamp)
-   };
-   time_point swap_timepoint = init_swap_data.swap_timestamp.to_time_point();
-   string swap_payload = join( { init_swap_data.swap_pubkey.substr(3), init_swap_data.txid, REMCHAIN_ID,
-                                 init_swap_data.quantity.to_string(), init_swap_data.return_address,
-                                 init_swap_data.return_chain_id, std::to_string( swap_timepoint.sec_since_epoch() ) } );
-   string swap_id = fc::sha256::hash( swap_payload );
+      // swap already canceled
+      BOOST_REQUIRE_THROW(init_swap(N(proda), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                                   init_swap_data.return_address, init_swap_data.return_chain_id,
+                                   init_swap_data.swap_timestamp), eosio_assert_message_exception);
 
-   for( const auto& producer : producer_candidates ) {
-   init_swap( producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
-              init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp );
-   }
+   } FC_LOG_AND_RETHROW()
+}
 
-   string sign_payload = join( { receiver.to_string(), init_swap_data.txid, REMCHAIN_ID, init_swap_data.quantity.to_string(),
+BOOST_FIXTURE_TEST_CASE(finish_swap_test, swap_tester) {
+   try {
+      name receiver = N(prodc);
+      crypto::private_key swap_key_priv = crypto::private_key::generate();
+      init_data init_swap_data = {
+         .swap_pubkey = get_pubkey_str(swap_key_priv),
+         .swap_timestamp = time_point_sec(control->head_block_time())
+      };
+      time_point swap_timepoint = init_swap_data.swap_timestamp.to_time_point();
+      string swap_payload = join({init_swap_data.swap_pubkey.substr(3), init_swap_data.txid, REMCHAIN_ID,
+                                  init_swap_data.quantity.to_string(), init_swap_data.return_address,
+                                  init_swap_data.return_chain_id, std::to_string(swap_timepoint.sec_since_epoch())});
+
+      string swap_id = sha256::hash(swap_payload);
+
+      for (const auto &producer : producer_candidates) {
+         init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                   init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
+      }
+
+      string sign_payload = join(
+         { receiver.to_string(), init_swap_data.txid, REMCHAIN_ID, init_swap_data.quantity.to_string(),
+           init_swap_data.return_address, init_swap_data.return_chain_id,
+           std::to_string(swap_timepoint.sec_since_epoch()) });
+
+      auto swap_digest = sha256::hash(sign_payload);
+      auto sign = swap_key_priv.sign(swap_digest);
+
+      auto receiver_before_balance = get_balance(receiver);
+      auto remswap_before_balance = get_balance(N(rem.swap));
+      asset producers_reward = get_producers_reward();
+
+      finish_swap(init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey,
+                  init_swap_data.quantity, init_swap_data.return_address, init_swap_data.return_chain_id,
+                  init_swap_data.swap_timestamp, sign);
+
+      auto receiver_after_balance = get_balance(receiver);
+      auto remswap_after_balance = get_balance(N(rem.swap));
+
+      auto data = get_singtable(N(rem.swap), N(swaps), "swap_data");
+
+      // table equal
+      BOOST_REQUIRE_EQUAL(swap_id, data["swap_id"].as_string());
+      // 2 if swap status finish
+      BOOST_REQUIRE_EQUAL("2", data["status"].as_string());
+      BOOST_REQUIRE_EQUAL(string(swap_timepoint), data["swap_timestamp"].as_string());
+      // amount of provided approvals must be a 2/3 + 1 of active producers
+      BOOST_TEST(majority <= data["provided_approvals"].get_array().size());
+      // balance equal : receiver balance += swapped quantity - producers_reward
+      BOOST_REQUIRE_EQUAL(receiver_before_balance + init_swap_data.quantity - producers_reward,
+                          receiver_after_balance);
+      // balance equal : swap contract -= swapped quantity
+      BOOST_REQUIRE_EQUAL(remswap_before_balance - init_swap_data.quantity, remswap_after_balance);
+
+      // swap already finished
+      BOOST_REQUIRE_THROW(
+         finish_swap(init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey,
+                     init_swap_data.quantity, init_swap_data.return_address, init_swap_data.return_chain_id,
+                     init_swap_data.swap_timestamp, sign),
+                     eosio_assert_message_exception);
+      // swap doesn't exist
+      BOOST_REQUIRE_THROW(
+         finish_swap(init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey,
+                     _core_from_string("500.0000"), init_swap_data.return_address,
+                     init_swap_data.return_chain_id, init_swap_data.swap_timestamp, sign),
+                     eosio_assert_message_exception);
+   } FC_LOG_AND_RETHROW()
+}
+
+BOOST_FIXTURE_TEST_CASE(finish_expired_swap_test, swap_tester) {
+   try {
+      name receiver = N(prodc);
+      crypto::private_key swap_key_priv = crypto::private_key::generate();
+      init_data init_swap_data = {
+         .swap_pubkey = get_pubkey_str(swap_key_priv),
+         .swap_timestamp = time_point_sec::from_iso_string("2019-12-01T00:00:00.000")
+      };
+      time_point swap_timepoint = init_swap_data.swap_timestamp.to_time_point();
+
+      for (const auto &producer : producer_candidates) {
+         init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                   init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
+      }
+
+      string sign_payload = join(
+         { receiver.to_string(), init_swap_data.txid, REMCHAIN_ID, init_swap_data.quantity.to_string(),
+           init_swap_data.return_address, init_swap_data.return_chain_id,
+           std::to_string(swap_timepoint.sec_since_epoch()) });
+
+      auto swap_digest = sha256::hash(sign_payload);
+      auto sign = swap_key_priv.sign(swap_digest);
+
+      // swap has to be canceled after expiration
+      BOOST_REQUIRE_THROW(
+         finish_swap(init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey,
+                     init_swap_data.quantity, init_swap_data.return_address, init_swap_data.return_chain_id,
+                     init_swap_data.swap_timestamp, sign),
+                     eosio_assert_message_exception);
+
+      // swap lifetime expired if a swap_timeswamp > 180 days
+      block_timestamp_type swap_expired_timestamp = time_point_sec::from_iso_string("2019-07-05T00:00:55.000");
+      for (const auto &producer : producer_candidates) {
+         init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                   init_swap_data.return_address, init_swap_data.return_chain_id, swap_expired_timestamp);
+      }
+      swap_timepoint = swap_expired_timestamp.to_time_point();
+
+      sign_payload = join(
+         { receiver.to_string(), init_swap_data.txid, REMCHAIN_ID, init_swap_data.quantity.to_string(),
+           init_swap_data.return_address, init_swap_data.return_chain_id,
+           std::to_string(swap_timepoint.sec_since_epoch()) });
+
+      swap_digest = sha256::hash(sign_payload);
+      sign = swap_key_priv.sign(swap_digest);
+
+      // swap lifetime expired
+      produce_blocks(10);
+      BOOST_REQUIRE_THROW(
+         finish_swap(init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey,
+                     init_swap_data.quantity, init_swap_data.return_address, init_swap_data.return_chain_id,
+                     swap_expired_timestamp, sign),
+                     eosio_assert_message_exception);
+   } FC_LOG_AND_RETHROW()
+}
+
+BOOST_FIXTURE_TEST_CASE(finish_not_confirmed_swap_test, swap_tester) {
+   try {
+      name receiver = N(prodc);
+      crypto::private_key swap_key_priv = crypto::private_key::generate();
+      init_data init_swap_data = {
+         .swap_pubkey = get_pubkey_str(swap_key_priv),
+         // swap can be canceled after expiration (1 week)
+         .swap_timestamp = time_point_sec::from_iso_string("2019-12-01T00:00:00.000")
+      };
+      time_point swap_timepoint = init_swap_data.swap_timestamp.to_time_point();
+
+      init_swap(N(proda), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
+
+      string sign_payload = join(
+         { receiver.to_string(), init_swap_data.txid, REMCHAIN_ID, init_swap_data.quantity.to_string(),
+           init_swap_data.return_address, init_swap_data.return_chain_id,
+           std::to_string(swap_timepoint.sec_since_epoch()) });
+
+      auto swap_digest = sha256::hash(sign_payload);
+      auto sign = swap_key_priv.sign(swap_digest);
+      // not enough active producers approvals
+      BOOST_REQUIRE_THROW(
+         finish_swap(init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey,
+                     init_swap_data.quantity, init_swap_data.return_address, init_swap_data.return_chain_id,
+                     init_swap_data.swap_timestamp, sign),
+                     eosio_assert_message_exception);
+   } FC_LOG_AND_RETHROW()
+}
+
+BOOST_FIXTURE_TEST_CASE(finish_swap_key_assert_test, swap_tester) {
+   try {
+      name receiver = N(prodc);
+      crypto::private_key swap_key_priv = crypto::private_key::generate();
+      init_data init_swap_data = {
+         .swap_pubkey = get_pubkey_str(swap_key_priv),
+         .swap_timestamp = time_point_sec(control->head_block_time())
+      };
+      time_point swap_timepoint = init_swap_data.swap_timestamp.to_time_point();
+
+      for (const auto &producer : producer_candidates) {
+         init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                   init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
+      }
+
+      string sign_payload = join(
+         { receiver.to_string(), init_swap_data.txid, REMCHAIN_ID, init_swap_data.quantity.to_string(),
+           init_swap_data.return_address, init_swap_data.return_chain_id,
+           std::to_string(swap_timepoint.sec_since_epoch()) });
+
+      // sign digest by another key
+      auto swap_digest = sha256::hash(sign_payload);
+      auto n_swap_key_priv = crypto::private_key::generate();
+      auto sign = n_swap_key_priv.sign(swap_digest);
+      // Error expected key different than recovered key
+      BOOST_REQUIRE_THROW(
+         finish_swap(init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey,
+                     init_swap_data.quantity, init_swap_data.return_address, init_swap_data.return_chain_id,
+                     init_swap_data.swap_timestamp, sign),
+                     crypto_api_exception);
+   } FC_LOG_AND_RETHROW()
+}
+
+BOOST_FIXTURE_TEST_CASE(finish_after_cancel_swap_test, swap_tester) {
+   try {
+      name receiver = N(prodc);
+      crypto::private_key swap_key_priv = crypto::private_key::generate();
+      init_data init_swap_data = {
+         .swap_pubkey = get_pubkey_str(swap_key_priv),
+         // swap can be canceled after expiration (1 week)
+         .swap_timestamp = time_point_sec::from_iso_string("2019-12-01T00:00:00.000")
+      };
+      time_point swap_timepoint = init_swap_data.swap_timestamp.to_time_point();
+
+      for (const auto &producer : producer_candidates) {
+         init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                   init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
+      }
+      cancel_swap(N(rem.swap), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                  init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
+
+      string sign_payload = join(
+         { receiver.to_string(), init_swap_data.txid, REMCHAIN_ID, init_swap_data.quantity.to_string(),
+           init_swap_data.return_address, init_swap_data.return_chain_id,
+           std::to_string(swap_timepoint.sec_since_epoch()) });
+
+      auto swap_digest = sha256::hash(sign_payload);
+      auto sign = swap_key_priv.sign(swap_digest);
+      // swap already canceled
+      BOOST_REQUIRE_THROW(
+         finish_swap(init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey,
+                     init_swap_data.quantity, init_swap_data.return_address, init_swap_data.return_chain_id,
+                     init_swap_data.swap_timestamp, sign),
+                     eosio_assert_message_exception);
+   } FC_LOG_AND_RETHROW()
+}
+
+BOOST_FIXTURE_TEST_CASE(finishnewacc_swap_test, swap_tester) {
+   try {
+      name receiver = N(testnewacc11);
+      crypto::private_key swap_key_priv = crypto::private_key::generate();
+      string owner_acc_pubkey = get_pubkey_str(crypto::private_key::generate());
+      string active_acc_pubkey = get_pubkey_str(crypto::private_key::generate());
+      init_data init_swap_data = {
+         .swap_pubkey = get_pubkey_str(swap_key_priv),
+         .swap_timestamp = time_point_sec(control->head_block_time())
+      };
+
+      time_point swap_timepoint = init_swap_data.swap_timestamp.to_time_point();
+      string swap_payload = join({init_swap_data.swap_pubkey.substr(3), init_swap_data.txid, REMCHAIN_ID,
+                                  init_swap_data.quantity.to_string(), init_swap_data.return_address,
+                                  init_swap_data.return_chain_id, std::to_string(swap_timepoint.sec_since_epoch())});
+
+      string swap_id = sha256::hash(swap_payload);
+
+      for (const auto &producer : producer_candidates) {
+         init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                   init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
+      }
+
+      string sign_payload = join(
+         { receiver.to_string(), owner_acc_pubkey, active_acc_pubkey, init_swap_data.txid, REMCHAIN_ID,
+           init_swap_data.quantity.to_string(), init_swap_data.return_address, init_swap_data.return_chain_id,
+           std::to_string(swap_timepoint.sec_since_epoch()) });
+
+      auto swap_digest = sha256::hash(sign_payload);
+      auto sign = swap_key_priv.sign(swap_digest);
+
+      auto remswap_before_balance = get_balance(N(rem.swap));
+      asset producers_reward = get_producers_reward();
+
+      finish_swap_new_account(init_swap_data.rampayer, receiver, owner_acc_pubkey, active_acc_pubkey,
+                              init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                              init_swap_data.return_address, init_swap_data.return_chain_id,
+                              init_swap_data.swap_timestamp, sign);
+
+      auto receiver_after_balance = get_balance(receiver);
+      auto remswap_after_balance = get_balance(N(rem.swap));
+
+      auto data = get_singtable(N(rem.swap), N(swaps), "swap_data");
+
+      // table equal
+      BOOST_REQUIRE_EQUAL(swap_id, data["swap_id"].as_string());
+      // 2 if swap status finish
+      BOOST_REQUIRE_EQUAL("2", data["status"].as_string());
+      BOOST_REQUIRE_EQUAL(string(swap_timepoint), data["swap_timestamp"].as_string());
+      // amount of provided approvals must be a 2/3 + 1 of active producers
+      BOOST_TEST(majority <= data["provided_approvals"].get_array().size());
+//      BOOST_TEST(is_account(receiver));
+      // balance equal : receiver balance = swapped quantity + min account stake - producers_reward
+      BOOST_REQUIRE_EQUAL(init_swap_data.quantity - producers_reward,
+                          receiver_after_balance + _core_from_string("100.0000"));
+      // balance equal : swap contract -= swapped quantity
+      BOOST_REQUIRE_EQUAL(remswap_before_balance - init_swap_data.quantity, remswap_after_balance);
+
+      // swap already finished
+      BOOST_REQUIRE_THROW(
+         finish_swap_new_account(init_swap_data.rampayer, receiver, owner_acc_pubkey, active_acc_pubkey,
+                                 init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
                                  init_swap_data.return_address, init_swap_data.return_chain_id,
-                                 std::to_string( swap_timepoint.sec_since_epoch() ) } );
+                                 init_swap_data.swap_timestamp, sign),
+         eosio_assert_message_exception);
+      // swap doesn't exist
+      BOOST_REQUIRE_THROW(
+         finish_swap_new_account(init_swap_data.rampayer, receiver, owner_acc_pubkey, active_acc_pubkey,
+                                 init_swap_data.txid, init_swap_data.swap_pubkey, _core_from_string("500.0000"),
+                                 init_swap_data.return_address, init_swap_data.return_chain_id,
+                                 init_swap_data.swap_timestamp, sign),
+         eosio_assert_message_exception);
+   } FC_LOG_AND_RETHROW()
+}
 
-   string swap_digest = fc::sha256::hash( sign_payload );
-   string sign_str = "SIG_K1_JucDm1qudEDHzYCaJhSWKUPDSCgEkezCnKBJH9ma9WDafeV1SG9hEViyyeriHBH129QHJX74eJdSS62vFiSMqivqnttGLk";
-   fc::crypto::signature sign(sign_str);
+BOOST_FIXTURE_TEST_CASE(finishnewacc_not_confirmed_swap_test, swap_tester) {
+   try {
+      name receiver = N(testnewacc11);
+      crypto::private_key swap_key_priv = crypto::private_key::generate();
+      string owner_acc_pubkey = get_pubkey_str(crypto::private_key::generate());
+      string active_acc_pubkey = get_pubkey_str(crypto::private_key::generate());
+      init_data init_swap_data = {
+         .swap_pubkey = get_pubkey_str(swap_key_priv),
+         .swap_timestamp = time_point_sec(control->head_block_time())
+      };
+      time_point swap_timepoint = init_swap_data.swap_timestamp.to_time_point();
 
-   auto receiver_before_balance = get_balance(receiver);
-   auto remswap_before_balance = get_balance(N(rem.swap));
+      init_swap(N(proda), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
 
-   finish_swap( init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
-                init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp, sign );
+      string sign_payload = join(
+         { receiver.to_string(), owner_acc_pubkey, active_acc_pubkey, init_swap_data.txid, REMCHAIN_ID,
+           init_swap_data.quantity.to_string(), init_swap_data.return_address, init_swap_data.return_chain_id,
+           std::to_string(swap_timepoint.sec_since_epoch()) });
 
-   auto receiver_after_balance = get_balance(receiver);
-   auto remswap_after_balance = get_balance(N(rem.swap));
+      auto swap_digest = sha256::hash(sign_payload);
+      auto sign = swap_key_priv.sign(swap_digest);
+      // not enough active producers approvals
+      BOOST_REQUIRE_THROW(
+         finish_swap(init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey,
+                     init_swap_data.quantity, init_swap_data.return_address, init_swap_data.return_chain_id,
+                     init_swap_data.swap_timestamp, sign),
+                     eosio_assert_message_exception);
+   } FC_LOG_AND_RETHROW()
+}
 
-   auto data = get_swap_info(N(swaps), "swap_data");
-   BOOST_REQUIRE_EQUAL(swap_id, data["swap_id"].as_string());
-   BOOST_REQUIRE_EQUAL("2", data["status"].as_string());
-   BOOST_TEST( majority <= data["provided_approvals"].get_array().size() );
-   BOOST_REQUIRE_EQUAL(receiver_before_balance + init_swap_data.quantity - producers_reward, receiver_after_balance);
-   BOOST_REQUIRE_EQUAL(remswap_before_balance - init_swap_data.quantity, remswap_after_balance);
+BOOST_FIXTURE_TEST_CASE(finishnewacc_expired_swap_test, swap_tester) {
+   try {
+      name receiver = N(testnewacc11);
+      crypto::private_key swap_key_priv = crypto::private_key::generate();
+      string owner_acc_pubkey = get_pubkey_str(crypto::private_key::generate());
+      string active_acc_pubkey = get_pubkey_str(crypto::private_key::generate());
+      init_data init_swap_data = {
+         .swap_pubkey = get_pubkey_str(swap_key_priv),
+         // swap can be canceled after expiration (1 week)
+         .swap_timestamp = time_point_sec::from_iso_string("2019-12-01T00:00:00.000")
+      };
+      time_point swap_timepoint = init_swap_data.swap_timestamp.to_time_point();
 
-   // swap already finished
-   BOOST_REQUIRE_THROW(finish_swap( init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey,
-                                    init_swap_data.quantity, init_swap_data.return_address, init_swap_data.return_chain_id,
-                                    init_swap_data.swap_timestamp, sign ),
-                                    eosio_assert_message_exception);
-   // swap has to be canceled after expiration
-   BOOST_REQUIRE_THROW(finish_swap( init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey,
-                                    init_swap_data.quantity, init_swap_data.return_address, init_swap_data.return_chain_id,
-                                    fc::time_point_sec::from_iso_string("2019-12-01T00:00:00.000"), sign ),
-                                    eosio_assert_message_exception);
-   // swap doesn't exist
-   BOOST_REQUIRE_THROW(finish_swap( init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey,
-                                    _core_from_string("500.0000"), init_swap_data.return_address,
-                                    init_swap_data.return_chain_id, init_swap_data.swap_timestamp, sign ),
-                                    eosio_assert_message_exception);
+      for (const auto &producer : producer_candidates) {
+         init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                   init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
+      }
 
-   swap_timepoint = fc::time_point_sec::from_iso_string("2019-07-05T00:00:43.000");
+      string sign_payload = join(
+         { receiver.to_string(), owner_acc_pubkey, active_acc_pubkey, init_swap_data.txid, REMCHAIN_ID,
+           init_swap_data.quantity.to_string(), init_swap_data.return_address, init_swap_data.return_chain_id,
+           std::to_string(swap_timepoint.sec_since_epoch()) });
 
-   init_swap( init_swap_data.rampayer, init_swap_data.txid, init_swap_data.swap_pubkey, _core_from_string("250.0000"),
-              init_swap_data.return_address, init_swap_data.return_chain_id, swap_timepoint );
+      auto swap_digest = sha256::hash(sign_payload);
+      auto sign = swap_key_priv.sign(swap_digest);
+      // swap has to be canceled after expiration
+      BOOST_REQUIRE_THROW(
+         finish_swap_new_account(init_swap_data.rampayer, receiver, owner_acc_pubkey, active_acc_pubkey,
+                                 init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                                 init_swap_data.return_address, init_swap_data.return_chain_id,
+                                 init_swap_data.swap_timestamp, sign),
+                                 eosio_assert_message_exception);
 
-   sign_str = "SIG_K1_K2yu6nrzAPrS9pXsaHZfrp4h4yUYRRn9wkaP9cd9mmvTXcixFHyq7s9FqqjhYKbJQnUjYSEdzaUgzKHNiSqVrPBhVyu7xk";
-   fc::crypto::signature _sign(sign_str);
+      // swap lifetime expired if a swap_timeswamp > 180 days
+      block_timestamp_type swap_expired_timestamp = time_point_sec::from_iso_string("2019-07-05T00:00:55.000");
+      for (const auto &producer : producer_candidates) {
+         init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                   init_swap_data.return_address, init_swap_data.return_chain_id, swap_expired_timestamp);
+      }
+      swap_timepoint = swap_expired_timestamp.to_time_point();
 
-   BOOST_REQUIRE_THROW(finish_swap( init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey,
-                                    _core_from_string("250.0000"), init_swap_data.return_address,
-                                    init_swap_data.return_chain_id, swap_timepoint, _sign ),
-                                    eosio_assert_message_exception);
+      sign_payload = join(
+         { receiver.to_string(), owner_acc_pubkey, active_acc_pubkey, init_swap_data.txid, REMCHAIN_ID,
+           init_swap_data.quantity.to_string(), init_swap_data.return_address, init_swap_data.return_chain_id,
+           std::to_string(swap_timepoint.sec_since_epoch()) });
 
-//   finish_swap( init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey,
-//                _core_from_string("250.0000"), init_swap_data.return_address,
-//                init_swap_data.return_chain_id, swap_timepoint, _sign );
+      swap_digest = sha256::hash(sign_payload);
+      sign = swap_key_priv.sign(swap_digest);
 
-   sign_payload = join( { receiver.to_string(), init_swap_data.txid, REMCHAIN_ID, _core_from_string("250.0000").to_string(),
-                          init_swap_data.return_address, init_swap_data.return_chain_id,
-                          std::to_string( swap_timepoint.sec_since_epoch() ) } );
+      // swap lifetime expired
+      produce_blocks(10);
+      BOOST_REQUIRE_THROW(
+         finish_swap_new_account(init_swap_data.rampayer, receiver, owner_acc_pubkey, active_acc_pubkey,
+                                 init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                                 init_swap_data.return_address, init_swap_data.return_chain_id,
+                                 swap_expired_timestamp, sign),
+         eosio_assert_message_exception);
+   } FC_LOG_AND_RETHROW()
+}
 
-   swap_digest = fc::sha256::hash( sign_payload );
-//   BOOST_TEST_MESSAGE( sign_payload );
-//   sign_str = "SIG_K1_K2yu6nrzAPrS9pXs aHZfrp4h4yUYRRn9wkaP9cd9mmvTXcixFHyq7s9FqqjhYKbJQnUjYSEdzaUgzKHNiSqVrPBhVyu7xk";
-//   fc::crypto::signature _sign(sign_str);
+BOOST_FIXTURE_TEST_CASE(finishnewacc_swap_key_assert_test, swap_tester) {
+   try {
+      name receiver = N(testnewacc11);
+      crypto::private_key swap_key_priv = crypto::private_key::generate();
+      string owner_acc_pubkey = get_pubkey_str(crypto::private_key::generate());
+      string active_acc_pubkey = get_pubkey_str(crypto::private_key::generate());
+      init_data init_swap_data = {
+         .swap_pubkey = get_pubkey_str(swap_key_priv),
+         .swap_timestamp = time_point_sec(control->head_block_time())
+      };
+      time_point swap_timepoint = init_swap_data.swap_timestamp.to_time_point();
 
-   // swap lifetime expired
-//   BOOST_REQUIRE_THROW(finish_swap( init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey,
-//                                    _core_from_string("250.0000"), init_swap_data.return_address,
-//                                    init_swap_data.return_chain_id, swap_timepoint, _sign ),
-//                                    eosio_assert_message_exception);
-//   sleep_for(10s);
+      for (const auto &producer : producer_candidates) {
+         init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                   init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
+      }
 
-//   finish_swap( init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey,
-//                _core_from_string("250.0000"), init_swap_data.return_address,
-//                init_swap_data.return_chain_id, swap_timepoint, _sign );
+      string sign_payload = join(
+         { receiver.to_string(), owner_acc_pubkey, active_acc_pubkey, init_swap_data.txid, REMCHAIN_ID,
+           init_swap_data.quantity.to_string(), init_swap_data.return_address, init_swap_data.return_chain_id,
+           std::to_string(swap_timepoint.sec_since_epoch()) });
 
+      // sign digest by another key
+      auto swap_digest = sha256::hash(sign_payload);
+      auto n_swap_key_priv = crypto::private_key::generate();
+      auto sign = n_swap_key_priv.sign(swap_digest);
+      // Error expected key different than recovered key
+      BOOST_REQUIRE_THROW(
+         finish_swap_new_account(init_swap_data.rampayer, receiver, owner_acc_pubkey, active_acc_pubkey,
+                                 init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                                 init_swap_data.return_address, init_swap_data.return_chain_id,
+                                 init_swap_data.swap_timestamp, sign),
+                                 crypto_api_exception);
+   } FC_LOG_AND_RETHROW()
+}
+
+BOOST_FIXTURE_TEST_CASE(finishnewacc_after_cancel_swap_test, swap_tester) {
+   try {
+      name receiver = N(testnewacc11);
+      crypto::private_key swap_key_priv = crypto::private_key::generate();
+      string owner_acc_pubkey = get_pubkey_str(crypto::private_key::generate());
+      string active_acc_pubkey = get_pubkey_str(crypto::private_key::generate());
+      init_data init_swap_data = {
+         .swap_pubkey = get_pubkey_str(swap_key_priv),
+         // swap can be canceled after expiration (1 week)
+         .swap_timestamp = time_point_sec::from_iso_string("2019-12-01T00:00:00.000")
+      };
+      time_point swap_timepoint = init_swap_data.swap_timestamp.to_time_point();
+
+      for (const auto &producer : producer_candidates) {
+         init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                   init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
+      }
+      cancel_swap(N(rem.swap), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                  init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
+
+      string sign_payload = join(
+         { receiver.to_string(), owner_acc_pubkey, active_acc_pubkey, init_swap_data.txid, REMCHAIN_ID,
+           init_swap_data.quantity.to_string(), init_swap_data.return_address, init_swap_data.return_chain_id,
+           std::to_string(swap_timepoint.sec_since_epoch()) });
+
+      auto swap_digest = sha256::hash(sign_payload);
+      auto sign = swap_key_priv.sign(swap_digest);
+      // swap already canceled
+      BOOST_REQUIRE_THROW(
+         finish_swap_new_account(init_swap_data.rampayer, receiver, owner_acc_pubkey, active_acc_pubkey,
+                                 init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                                 init_swap_data.return_address, init_swap_data.return_chain_id,
+                                 init_swap_data.swap_timestamp, sign),
+                                 eosio_assert_message_exception);
+   } FC_LOG_AND_RETHROW()
+}
+
+BOOST_FIXTURE_TEST_CASE(cancel_swap_test, swap_tester) {
+   try {
+      name receiver = N(prodc);
+      crypto::private_key swap_key_priv = crypto::private_key::generate();
+      init_data init_swap_data = {
+         .swap_pubkey = get_pubkey_str(swap_key_priv),
+         // swap can be canceled after expiration (1 week)
+         .swap_timestamp = time_point_sec::from_iso_string("2019-12-01T00:00:00.000")
+      };
+      time_point swap_timepoint = init_swap_data.swap_timestamp.to_time_point();
+
+      string swap_payload = join({init_swap_data.swap_pubkey.substr(3), init_swap_data.txid, REMCHAIN_ID,
+                                  init_swap_data.quantity.to_string(), init_swap_data.return_address,
+                                  init_swap_data.return_chain_id, std::to_string(swap_timepoint.sec_since_epoch())});
+
+      string swap_id = sha256::hash(swap_payload);
+
+      auto remswap_before_init_balance = get_balance(N(rem.swap));
+      for (const auto &producer : producer_candidates) {
+         init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                   init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
+      }
+
+      auto remswap_before_cancel_balance = get_balance(N(rem.swap));
+      cancel_swap(N(rem.swap), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                  init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
+
+      auto remswap_after_cancel_balance = get_balance(N(rem.swap));
+      auto data = get_singtable(N(rem.swap), N(swaps), "swap_data");
+
+      // table equal
+      BOOST_REQUIRE_EQUAL(swap_id, data["swap_id"].as_string());
+      BOOST_REQUIRE_EQUAL(string(swap_timepoint), data["swap_timestamp"].as_string());
+      // -1 if a swap status canceled
+      BOOST_REQUIRE_EQUAL("-1", data["status"].as_string());
+      //  after init issues quantity amount of tokens, after cancel retires quantity amount of tokens
+      BOOST_REQUIRE_EQUAL(remswap_before_init_balance, remswap_after_cancel_balance);
+      // balance equal: after issue tokens balance before cancel should be increased on the 'quantity' amount of tokens
+      BOOST_REQUIRE_EQUAL(remswap_before_init_balance + init_swap_data.quantity, remswap_before_cancel_balance);
+      // amount of provided approvals must be a 2/3 + 1 of active producers
+      BOOST_TEST(majority <= data["provided_approvals"].get_array().size());
+
+      block_timestamp_type swap_not_expired_timestamp = time_point_sec(control->head_block_time());
+      // swap lifetime expired if a swap_timeswamp > 180 days
+      block_timestamp_type swap_expired_timestamp = time_point_sec::from_iso_string("2019-07-05T00:01:10.000");
+      for (const auto &producer : producer_candidates) {
+         init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                   init_swap_data.return_address, init_swap_data.return_chain_id, swap_not_expired_timestamp);
+         init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                   init_swap_data.return_address, init_swap_data.return_chain_id, swap_expired_timestamp);
+      }
+      init_swap(N(proda), init_swap_data.txid, init_swap_data.swap_pubkey, _core_from_string("300.0000"),
+                init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
+
+      // swap already canceled
+      BOOST_REQUIRE_THROW(
+         cancel_swap(N(rem.swap), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                     init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp),
+                     eosio_assert_message_exception);
+      // swap doesn't exist
+      BOOST_REQUIRE_THROW(
+         cancel_swap(N(rem.swap), init_swap_data.txid, init_swap_data.swap_pubkey, _core_from_string("100.0000"),
+                     init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);,
+                     eosio_assert_message_exception);
+      // swap has to be canceled after expiration
+      BOOST_REQUIRE_THROW(
+         cancel_swap(N(rem.swap), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                     init_swap_data.return_address, init_swap_data.return_chain_id, swap_not_expired_timestamp),
+                     eosio_assert_message_exception);
+
+      // swap lifetime expired
+      produce_blocks(10);
+      BOOST_REQUIRE_THROW(
+         cancel_swap(N(rem.swap), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                     init_swap_data.return_address, init_swap_data.return_chain_id, swap_expired_timestamp),
+                     eosio_assert_message_exception);
+
+      // not enough active producers approvals
+      BOOST_REQUIRE_THROW(
+         cancel_swap(N(rem.swap), init_swap_data.txid, init_swap_data.swap_pubkey, _core_from_string("300.0000"),
+                     init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp),
+                     eosio_assert_message_exception);
+
+   } FC_LOG_AND_RETHROW()
+}
+
+BOOST_FIXTURE_TEST_CASE(cancel_after_finish_swap_test, swap_tester) {
+   try {
+      name receiver = N(prodc);
+      crypto::private_key swap_key_priv = crypto::private_key::generate();
+      init_data init_swap_data = {
+         .swap_pubkey = get_pubkey_str(swap_key_priv),
+         .swap_timestamp = time_point_sec(control->head_block_time())
+      };
+      time_point swap_timepoint = init_swap_data.swap_timestamp.to_time_point();
+
+      for (const auto &producer : producer_candidates) {
+         init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                   init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
+      }
+
+      string sign_payload = join(
+         { receiver.to_string(), init_swap_data.txid, REMCHAIN_ID, init_swap_data.quantity.to_string(),
+           init_swap_data.return_address, init_swap_data.return_chain_id,
+           std::to_string(swap_timepoint.sec_since_epoch()) });
+
+      auto swap_digest = sha256::hash(sign_payload);
+      auto sign = swap_key_priv.sign(swap_digest);
+
+      finish_swap(init_swap_data.rampayer, receiver, init_swap_data.txid, init_swap_data.swap_pubkey,
+                  init_swap_data.quantity, init_swap_data.return_address, init_swap_data.return_chain_id,
+                  init_swap_data.swap_timestamp, sign);
+
+      // swap already finished
+      BOOST_REQUIRE_THROW(
+         cancel_swap(N(rem.swap), init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
+                     init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp),
+                     eosio_assert_message_exception);
+   } FC_LOG_AND_RETHROW()
+}
+
+BOOST_FIXTURE_TEST_CASE(init_return_swap_test, swap_tester) {
+   try {
+      name sender = N(whale3);
+      string return_address = "9f21f19180c8692ebaa061fd231cd1b029ff2326";
+      string return_chain_id = "ethropsten";
+      string memo = return_chain_id + ' ' + return_address;
+      asset quantity = _core_from_string("500.0000");
+
+      // add to sender unstacked tokens by transfer from rem.swap
+      transfer(N(rem.swap), sender, quantity, "initial tansfer");
+      auto remswap_before_transfer_balance = get_balance(N(rem.swap));
+      auto sender_before_transfer_balance = get_balance(sender);
+
+      transfer(sender, N(rem.swap), quantity, memo);
+
+      auto remswap_after_transfer_balance = get_balance(N(rem.swap));
+      auto sender_after_transfer_balance = get_balance(sender);
+
+      BOOST_REQUIRE_EQUAL(remswap_before_transfer_balance, remswap_after_transfer_balance);
+      BOOST_REQUIRE_EQUAL(sender_before_transfer_balance - quantity, sender_after_transfer_balance);
+
+      // invalid memo
+      BOOST_REQUIRE_THROW(transfer(sender, N(rem.swap), quantity, ""), eosio_assert_message_exception);
+      BOOST_REQUIRE_THROW(transfer(sender, N(rem.swap), quantity, return_chain_id + return_address),
+                          eosio_assert_message_exception);
+      // wrong chain id
+      BOOST_REQUIRE_THROW(transfer(sender, N(rem.swap), quantity, ' ' + return_address),
+                          eosio_assert_message_exception);
+      // wrong address
+      BOOST_REQUIRE_THROW(transfer(sender, N(rem.swap), quantity, return_chain_id + ' '),
+                          eosio_assert_message_exception);
+      // symbol precision mismatch
+      BOOST_REQUIRE_THROW(transfer(sender, N(rem.swap), asset::from_string("500.0000 SYS"), memo),
+                          eosio_assert_message_exception);
+   } FC_LOG_AND_RETHROW()
+};
+
+BOOST_FIXTURE_TEST_CASE(set_block_producers_reward_test, swap_tester) {
+   try {
+      setbpreward(N(rem.swap), _core_from_string("100.0000"));
+
+      BOOST_REQUIRE_EQUAL(get_producers_reward(), _core_from_string("100.0000"));
+
+      // symbol precision mismatch
+      BOOST_REQUIRE_THROW(setbpreward(N(rem.swap), asset::from_string("100.0000 SYS")), eosio_assert_message_exception);
+      BOOST_REQUIRE_THROW(setbpreward(N(rem.swap), asset::from_string("100 REM")), eosio_assert_message_exception);
+      // amount must be a positive
+      BOOST_REQUIRE_THROW(setbpreward(N(rem.swap), asset::from_string("-100.0000 REM")), eosio_assert_message_exception);
+      // missing required authority
+      BOOST_REQUIRE_THROW(setbpreward(N(proda), _core_from_string("100.0000")), missing_auth_exception);
    } FC_LOG_AND_RETHROW()
 }
 

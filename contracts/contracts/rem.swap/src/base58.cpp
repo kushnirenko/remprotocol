@@ -19,7 +19,6 @@ namespace eosio {
       return base58_map;
    }
 
-
    template <size_t size>
    std::array<uint8_t, size> base58_to_binary(std::string_view s) {
       std::array<uint8_t, size> result{{0}};
@@ -44,7 +43,6 @@ namespace eosio {
       r1 = 1,
    };
 
-
    template <typename Key, int suffix_size>
    Key string_to_key(std::string_view s, key_type type, const char (&suffix)[suffix_size]) {
       static const auto size = std::tuple_size<decltype(Key::data)>::value;
@@ -53,7 +51,6 @@ namespace eosio {
       memcpy(result.data.data(), whole.data(), result.data.size());
       return result;
    }
-
 
    eosio::public_key string_to_public_key(std::string_view s) {
       if (s.size() >= 3 && ( s.substr(0, 3) == "EOS" || s.substr(0, 3) == "REM") ) {
