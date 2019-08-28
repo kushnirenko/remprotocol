@@ -26,14 +26,13 @@ namespace eosio {
     */
    class [[eosio::contract("rem.utils")]] utils : public contract {
    public:
-      using contract::contract;
       utils(name receiver, name code,  datastream<const char*> ds);
 
 
       /**
        * Validate address.
        *
-       * @details Validation address another blockchain.
+       * @details Validation blockchain address.
        *
        * @param name - the chain id validation for,
        * @param address - the address in the corresponding chain network.
@@ -76,7 +75,10 @@ namespace eosio {
       typedef multi_index< "swapfee"_n, swap_fee> swap_fee_index;
       swap_fee_index swap_fee_table;
 
-      void validate_eth_address( string address );
+      void validate_eth_address(string address);
+      void validate_eth_address_checksum(string checksum_address);
+      string bytetohex(unsigned char *data, int len);
+      std::array<unsigned char, 32> sha3_256(const string& address);
       void add_chain( const name& chain_id, const asset& fee );
    };
    /** @}*/ // end of @defgroup eosioutils rem.utils

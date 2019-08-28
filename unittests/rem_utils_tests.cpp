@@ -69,7 +69,7 @@ const name TEST_CONTRACT = N(rem.utils);
 symbol CORE_SYMBOL_STR(4, SYMBOL_CORE_NAME);
 
 name ETHCHAINID = N(ethropsten);
-string ETHADDRESS = "0x9f21f19180c8692ebaa061fd231cd1b029ff2326";
+string ETHADDRESS = "0x9fB8A18fF402680b47387AE0F4e38229EC64f098";
 
 class utils_tester : public TESTER {
 public:
@@ -244,21 +244,21 @@ utils_tester::utils_tester() {
 
 BOOST_AUTO_TEST_SUITE(utils_tests)
 
-BOOST_FIXTURE_TEST_CASE( validate_address_test, utils_tester ) {
+BOOST_FIXTURE_TEST_CASE( validate_eth_address_test, utils_tester ) {
    try {
       validate_address(N(proda), ETHCHAINID, ETHADDRESS);
    } FC_LOG_AND_RETHROW()
 }
 
-BOOST_FIXTURE_TEST_CASE( validate_address_test_without_hexpre, utils_tester ) {
+BOOST_FIXTURE_TEST_CASE( validate_eth_address_test_without_hexpre, utils_tester ) {
    try {
-      string address = "9f21f19180c8692ebaa061fd231cd1b029ff2326";
+      string address = "9fB8A18fF402680b47387AE0F4e38229EC64f098";
 
       validate_address(N(proda), ETHCHAINID, address);
    } FC_LOG_AND_RETHROW()
 }
 
-BOOST_FIXTURE_TEST_CASE( validate_address_test_with_non_existed_chain_id, utils_tester ) {
+BOOST_FIXTURE_TEST_CASE( validate_eth_address_test_with_non_existed_chain_id, utils_tester ) {
    try {
       name ethchainid = N(nonexchain);
 
@@ -267,14 +267,14 @@ BOOST_FIXTURE_TEST_CASE( validate_address_test_with_non_existed_chain_id, utils_
    } FC_LOG_AND_RETHROW()
 }
 
-BOOST_FIXTURE_TEST_CASE( validate_address_test_with_non_existed_account, utils_tester ) {
+BOOST_FIXTURE_TEST_CASE( validate_eth_address_test_with_non_existed_account, utils_tester ) {
    try {
       // auth error
       BOOST_REQUIRE_THROW(validate_address(N(fail), ETHCHAINID, ETHADDRESS), transaction_exception);
    } FC_LOG_AND_RETHROW()
 }
 
-BOOST_FIXTURE_TEST_CASE( validate_address_test_with_address_invalid_length, utils_tester ) {
+BOOST_FIXTURE_TEST_CASE( validate_eth_address_test_with_address_invalid_length, utils_tester ) {
    try {
       string address = "0x9f21f19180c8692eb";
 
@@ -283,11 +283,28 @@ BOOST_FIXTURE_TEST_CASE( validate_address_test_with_address_invalid_length, util
    } FC_LOG_AND_RETHROW()
 }
 
-BOOST_FIXTURE_TEST_CASE( validate_address_test_with_address_invalid_symbol, utils_tester ) {
+BOOST_FIXTURE_TEST_CASE( validate_eth_address_test_with_address_invalid_symbol, utils_tester ) {
    try {
-      string address = "0x9f21f19180c8692ebaa061fd231cd1b029ff232%";
+      string address = "0x9fB8A18fF402680b47387AE0F4e38229EC64f09%";
 
       // invalid hex symbol in ethereum address
+      BOOST_REQUIRE_THROW(validate_address(N(proda), ETHCHAINID, address), eosio_assert_message_exception);
+   } FC_LOG_AND_RETHROW()
+}
+
+BOOST_FIXTURE_TEST_CASE( validate_eth_address_invalid_checksum, utils_tester ) {
+   try {
+      // valid address all upper
+      string address = "0x8617E340B3D01FA5F11F306F4090FD50E238070D";
+      validate_address(N(proda), ETHCHAINID, address);
+
+      address = "0x9fB8A18fF402680b47387AE0F4e38229EC64f097";
+      // invalid ethereum address checksum
+      BOOST_REQUIRE_THROW(validate_address(N(proda), ETHCHAINID, address), eosio_assert_message_exception);
+
+      // valid address all lower
+      address = "0xd423ae43105a0185c18f968cd8be0fa276689c04";
+      // invalid ethereum address checksum
       BOOST_REQUIRE_THROW(validate_address(N(proda), ETHCHAINID, address), eosio_assert_message_exception);
    } FC_LOG_AND_RETHROW()
 }

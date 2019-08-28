@@ -4,6 +4,9 @@
 
 #include <rem.utils/rem.utils.hpp>
 
+#define USE_KECCAK
+#include <sha3/sha3.c>
+
 #include "validate_address.cpp"
 
 namespace eosio {
