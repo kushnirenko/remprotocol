@@ -134,7 +134,7 @@ namespace eosio {
       /**
        * Init swap action.
        *
-       * @details Initiate token swap from remchain.
+       * @details Initiate token swap from remchain to sender network.
        * Action initiated after transfer tokens to swap contract with valid data.
        *
        * @param from - the account to transfer from,
@@ -166,7 +166,6 @@ namespace eosio {
       static constexpr name system_token_account = "rem.token"_n;
 
       const string remchain_id = "93ece941df27a5787a405383a66a7c26d04e80182adf504365710331ac0625a7";
-      const string ethchain_id = "ethropsten";
 
       const time_point swap_lifetime = time_point(seconds(15552000)); // 180 days
       const time_point swap_active_lifetime = time_point(seconds(604800)); // 7 days
@@ -215,10 +214,9 @@ namespace eosio {
       p_reward p_reward_table;
 
       bool is_block_producer(const name &user);
-      vector <name> get_active_producers();
+      bool is_swap_confirmed(const vector <name> &provided_approvals);
       static asset get_min_account_stake();
       asset get_swapbot_fee(const name &chain_id);
-      bool is_swap_confirmed(const vector <name> &provided_approvals);
 
       checksum256 get_swap_id(const string &txid, const string &swap_pubkey_str, const asset &quantity,
                               const string &return_address, const string &return_chain_id,
