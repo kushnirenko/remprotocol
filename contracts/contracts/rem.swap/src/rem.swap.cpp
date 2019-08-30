@@ -31,7 +31,7 @@ namespace eosio {
 //      validate_address(name(return_chain_id), return_address);
       check(quantity.is_valid(), "invalid quantity");
       check(quantity.symbol == min_account_stake.symbol, "symbol precision mismatch");
-      check(quantity.amount > min_account_stake.amount + producers_reward.amount, "the quantity must be greater "
+      check(quantity.amount >= min_account_stake.amount + producers_reward.amount, "the quantity must be greater "
                                                                                   "than the swap fee");
       time_point swap_timepoint = swap_timestamp.to_time_point();
 
@@ -152,7 +152,10 @@ namespace eosio {
 
       to_rewards(producers_reward);
       create_user(receiver, owner_key, active_key, min_account_stake);
-      transfer(receiver, quantity);
+
+      if ( quantity.amount > 0 ) {
+         transfer(receiver, quantity);
+      }
 
       swap_table.modify(*swap_hash_itr, rampayer, [&](auto &s) {
          s.status = static_cast<int8_t>(swap_status::FINISHED);
