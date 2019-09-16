@@ -13,12 +13,14 @@ namespace eosio {
 
    void auth::addkey(const name& account, const public_key& device_key, const signature& sign_device_key,
                      const string& extra_key, const string& payer_str) {
-      require_auth(account);
+
       name payer = payer_str.empty() ? account : name(payer_str);
+      require_auth(account);
+      require_auth(payer);
 
       checksum256 digest = sha256(join( { account.to_string(), string(device_key.data.begin(),
                                           device_key.data.end()), extra_key, payer_str } ));
-//      assert_recover_key(digest, sign_device_key, device_key);
+      assert_recover_key(digest, sign_device_key, device_key);
 
       _addkey(account, device_key, extra_key, payer);
    }
@@ -113,7 +115,7 @@ namespace eosio {
          k.not_valid_after = current_time_point() + key_lifetime;
          k.revoked_at = 0; // if not revoked == 0
       });
-//      to_rewards(prods_reward, payer);
+      to_rewards(prods_reward, payer);
    }
 
    void auth::transfer( const name& from, const name& to, const asset& quantity,
