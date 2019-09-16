@@ -87,11 +87,11 @@ namespace eosio {
       }
       const uint8_t majority = (_producers.size() * 2 / 3) + 1;
       // TODO: uncomment this when swap bot will be in 2/3+1 prods
-      if ( majority <= quantity_active_appr ) { return true; }
-         return false;
-//      if ( 2 <= quantity_active_appr) { return true; }
-//
-//      return false;
+//      if ( majority <= quantity_active_appr ) { return true; }
+//         return false;
+      if ( 2 <= quantity_active_appr) { return true; }
+
+      return false;
    }
 
    string swap::join( vector<string>&& vec, string delim ) {

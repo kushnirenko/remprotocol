@@ -262,12 +262,18 @@ namespace eosio {
    }
 
    void swap::cleanup_swaps() {
+      const uint8_t max_clear_depth = 10;
+      size_t i = 0;
       for (auto _table_itr = swap_table.begin(); _table_itr != swap_table.end();) {
          time_point swap_timepoint = _table_itr->swap_timestamp.to_time_point();
-         if (time_point_sec(current_time_point()) > swap_timepoint + swap_lifetime) {
-            _table_itr = swap_table.erase(_table_itr);
+         bool not_expired = time_point_sec(current_time_point()) <= swap_timepoint + swap_lifetime;
 
-         } else { ++_table_itr; }
+         if (not_expired || i >= max_clear_depth) {
+            break;
+         } else {
+            _table_itr = swap_table.erase(_table_itr);
+            ++i;
+         }
       }
    }
 
