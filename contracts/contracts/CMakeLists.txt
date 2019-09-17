@@ -7,6 +7,7 @@ find_package(eosio.cdt)
 
 add_subdirectory(rem.bios)
 add_subdirectory(rem.msig)
+add_subdirectory(rem.oracle)
 add_subdirectory(rem.system)
 add_subdirectory(rem.token)
 add_subdirectory(rem.wrap)
