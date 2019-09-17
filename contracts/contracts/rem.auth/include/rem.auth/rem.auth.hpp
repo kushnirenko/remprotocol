@@ -32,11 +32,11 @@ namespace eosio {
       auth(name receiver, name code,  datastream<const char*> ds);
 
       /**
-       * New authentication account.
+       * Add authentication key.
        *
-       * @details Create auth account.
+       * @details .
        *
-       * @param user - the owner account to execute the newauth action for,
+       * @param user - the owner account to execute the addkey action for,
        * @param device_pubkey - the public key corresponding to the new authentication device.
        */
       [[eosio::action]]
@@ -89,8 +89,8 @@ namespace eosio {
       static constexpr name system_token_account = "rem.token"_n;
       const asset prods_reward{100000, core_symbol};
       const time_point key_lifetime = time_point(seconds(31104000)); // 360 days
-      const uint32_t wait_confirm_sec = 360;
-      const time_point wait_confirm_time = time_point(seconds(wait_confirm_sec)); // 1 day
+      const uint32_t wait_confirm_sec = 86400; // 1 day
+      const time_point wait_confirm_time = time_point(seconds(wait_confirm_sec));
 
       struct [[eosio::table]] authkeys {
          uint64_t          key;
@@ -112,15 +112,6 @@ namespace eosio {
                           indexed_by<"byname"_n, const_mem_fun < authkeys, uint64_t, &authkeys::by_name>>
                            > authkeys_inx;
       authkeys_inx authkeys_tbl;
-
-      struct addkeywrap_st { // debug for upacked action
-         name              owner;
-         public_key        device_key;
-         string            app_key;
-         name              payer;
-
-         EOSLIB_SERIALIZE( addkeywrap_st, (owner)(device_key)(app_key)(payer))
-      };
 
       struct [[eosio::table]] wait_confirm {
          uint64_t              key;
@@ -146,12 +137,12 @@ namespace eosio {
 
       string join(vector <string> &&vec, string delim = string("*"));
       void to_rewards(const asset &quantity, const name& payer);
-      void require_app_auth( const checksum256& digest,           const name& user,
+      void require_app_auth( const checksum256& digest, const name& user,
                              const public_key& sign_pub_key, const signature& signature );
 
-      template<class iter>
-      void boost_deferred_tx(const iter& it, const action& acc, const public_key& device_key);
-      void send_deffered_tx( const action& act, const uint32_t& delay, const uint128_t& id );
+      template<class T>
+      void boost_deferred_tx(const T& it, const action& acc, const public_key& device_key);
+      void send_deferred_tx( const action& act, const uint32_t& delay, const uint128_t& id );
 
       void _addkey( const name& account, const public_key& device_key, const string& extra_key, const name& payer);
 

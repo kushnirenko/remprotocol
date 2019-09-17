@@ -34,10 +34,10 @@ namespace eosio {
       auto ct = current_time_point();
       for (; it != wait_idx.end(); ++it) {
          bool is_executed = ct > it->wait_time;
-         bool is_equal_action_acc = it->action_account != action_account;
-         bool is_equal_action_name = it->action_name != action_name;
+         bool is_equal_action_acc = it->action_account == action_account;
+         bool is_equal_action_name = it->action_name == action_name;
 
-         if (  is_executed || is_equal_action_acc || is_equal_action_name ) {
+         if (  is_executed || !is_equal_action_acc || !is_equal_action_name ) {
             continue;
          } else if (it->action_data == action_data) {
             break;
@@ -54,10 +54,9 @@ namespace eosio {
       checksum256 digest = sha256(join( { account.to_string(), string(toadd_key.data.begin(), toadd_key.data.end()),
                                           string(device_key.data.begin(), device_key.data.end()), extra_key,
                                           payer_str } ));
-//      name payer = payer_str.empty() ? account : name(payer_str); // TODO: uncomment this when set privilege to acc
-      name payer = _self; // TODO: delete this when acc will be privilege
+      name payer = payer_str.empty() ? account : name(payer_str);
       require_app_auth(digest, account, device_key, sign_device_key);
-//      assert_recover_key(digest, sign_toadd_key, toadd_key);
+      assert_recover_key(digest, sign_toadd_key, toadd_key);
 
       addkeywrap_action addkeywrap(_self, { _self, "active"_n });
       action addkey_action = addkeywrap.to_action(account, toadd_key, extra_key, payer);
@@ -68,12 +67,12 @@ namespace eosio {
       } else {
          const time_point ct = current_time_point();
          add_wait_action(account, _self, "addkeywrap"_n, addkey_action.data, device_key, ct);
-         send_deffered_tx(addkey_action, wait_confirm_sec, ct.sec_since_epoch() + account.value);
+         send_deferred_tx(addkey_action, wait_confirm_sec, ct.sec_since_epoch() + account.value);
       }
    }
 
-   template<class iter>
-   void auth::boost_deferred_tx(const iter& it, const action& acc, const public_key& device_key) {
+   template<class T>
+   void auth::boost_deferred_tx(const T& it, const action& acc, const public_key& device_key) {
       bool is_already_approved = std::find( it->provided_approvals.begin(),
                                             it->provided_approvals.end(), device_key
                                             ) == it->provided_approvals.end();
@@ -83,18 +82,17 @@ namespace eosio {
       uint32_t delta = it->wait_time.to_time_point().sec_since_epoch() - ct.sec_since_epoch();
       check(delta >= 0, "action already executed");
 
-      print(delta / (it->provided_approvals.size() + 1));
       uint32_t wait_sec = delta / (it->provided_approvals.size() + 1);
       time_point wait_time = time_point(seconds(wait_sec));
 
-      wait_confirm_tbl.modify(*it, _self, [&](auto &w) { // TODO: move _self to it->owner
+      wait_confirm_tbl.modify(*it, _self, [&](auto &w) { // TODO: change _self to it->owner
          w.provided_approvals.push_back(device_key);
          w.wait_time = it->init_time.to_time_point() + wait_time;
       });
 
       uint128_t deferred_tx_id = it->init_time.to_time_point().sec_since_epoch() + it->owner.value;
       cancel_deferred(deferred_tx_id);
-      send_deffered_tx(acc, wait_sec, deferred_tx_id);
+      send_deferred_tx(acc, wait_sec, deferred_tx_id);
    }
 
    void auth::addkeywrap( const name& account, const public_key& device_key,
@@ -135,7 +133,7 @@ namespace eosio {
       } else {
          const time_point ct = current_time_point();
          add_wait_action(from, system_token_account, "transfer"_n, transfer_action.data, device_key, ct);
-         send_deffered_tx(transfer_action, wait_confirm_sec, ct.sec_since_epoch() + from.value);
+         send_deferred_tx(transfer_action, wait_confirm_sec, ct.sec_since_epoch() + from.value);
       }
    }
 
@@ -152,7 +150,7 @@ namespace eosio {
          auto ct = current_time_point();
 
          bool is_before_time_valid = ct < it->not_valid_before.to_time_point();
-         bool is_after_time_valid = ct < it->not_valid_before.to_time_point();
+         bool is_after_time_valid = ct > it->not_valid_after.to_time_point();
          bool is_revoked = it->revoked_at && it->revoked_at < ct.sec_since_epoch();
 
          if ( is_before_time_valid || is_after_time_valid || is_revoked) {
@@ -162,10 +160,10 @@ namespace eosio {
          }
       }
       check(it != authkeys_idx.end(), "account has no active app keys");
-//      assert_recover_key(digest, signature, sign_pub_key);
+      assert_recover_key(digest, signature, sign_pub_key);
    }
 
-   void auth::send_deffered_tx( const action& act, const uint32_t& delay, const uint128_t& id ) {
+   void auth::send_deferred_tx( const action& act, const uint32_t& delay, const uint128_t& id ) {
       transaction t;
       t.actions.emplace_back(act);
       t.delay_sec = delay;
@@ -174,7 +172,7 @@ namespace eosio {
 
    void auth::add_wait_action( const name& account, const name& action_account, const name& action_name,
                                const vector<char> action_data, const public_key& sign_pubkey, const time_point& ct ) {
-      wait_confirm_tbl.emplace(_self, [&](auto &w) { // TODO: MOVE _SELF TO ACCOUNT
+      wait_confirm_tbl.emplace(_self, [&](auto &w) { // TODO: change _self to account
          w.key = wait_confirm_tbl.available_primary_key();
          w.owner = account;
          w.init_time = ct;

@@ -169,6 +169,22 @@ public:
       return r;
    }
 
+   auto appaddkey(const name& account, const crypto::public_key& toadd_key, const crypto::signature& sign_toadd_key,
+                  const string& extra_key, const crypto::public_key& device_key, const crypto::signature& sign_device_key,
+                  const string& payer_str, const vector<permission_level>& auths) {
+      auto r = base_tester::push_action(TEST_CONTRACT, N(appaddkey), auths, mvo()
+         ("account",  account)
+         ("toadd_key", toadd_key )
+         ("sign_toadd_key", sign_toadd_key )
+         ("extra_key", extra_key )
+         ("device_key", device_key )
+         ("sign_device_key", sign_device_key )
+         ("payer_str", payer_str )
+      );
+      produce_block();
+      return r;
+   }
+
    auto register_producer(name producer) {
       auto r = base_tester::push_action(config::system_account_name, N(regproducer), producer, mvo()
          ("producer",  name(producer))
@@ -183,6 +199,12 @@ public:
    variant get_authkeys_tbl( const name& account ) {
 //      vector<char> data = get_row_by_account( TEST_CONTRACT, TEST_CONTRACT, N(authkeys), account );
       return get_singtable(TEST_CONTRACT, N(authkeys), "authkeys");
+   }
+
+   variant get_wait_tbl( const name& account ) {
+//      vector<char> data = get_row_by_account( TEST_CONTRACT, TEST_CONTRACT, N(wait), account );
+//      return data.empty() ? fc::variant() : abi_ser.binary_to_variant( "wait_confirm", data, abi_serializer_max_time );
+      return get_singtable(TEST_CONTRACT, N(wait), "wait_confirm");
    }
 
    variant get_singtable(const name& contract, const name &table, const string &type) {
@@ -384,7 +406,50 @@ BOOST_FIXTURE_TEST_CASE( addkey_test, auth_tester ) {
 
 BOOST_FIXTURE_TEST_CASE( appaddkey_test, auth_tester ) {
    try {
+      name account = N(proda);
+      vector<permission_level> auths_level = { permission_level{N(prodb), config::active_name} }; // prodb as a executor
+      updateauth(account, TEST_CONTRACT);
+      crypto::private_key toadd_key_priv = crypto::private_key::generate();
+      crypto::private_key device_key_priv = crypto::private_key::generate();
+      crypto::public_key toadd_key_pub = toadd_key_priv.get_public_key();
+      crypto::public_key device_key_pub = device_key_priv.get_public_key();
+      auto device_key_pub_bytes = from_base58(string(device_key_pub).substr(3));
+      auto toadd_key_pub_bytes = from_base58(string(toadd_key_pub).substr(3));
+      toadd_key_pub_bytes.resize(33);
+      device_key_pub_bytes.resize(33);
+      string payer_str = "";
+      string extra_key = "MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIZDXel8Nh0xnGOo39XE3Jqdi6iQpxRs\n"
+                         "/r82O1HnpuJFd/jyM3iWInPZvmOnPCP3/Nx4fRNj1y0U9QFnlfefNeECAwEAAQ==";
 
+      sha256 digest_appaddkey = sha256::hash(join( { account.to_string(), string(toadd_key_pub_bytes.begin(),
+                                                     toadd_key_pub_bytes.end()), string(device_key_pub_bytes.begin(),
+                                                     device_key_pub_bytes.end()), extra_key, payer_str } ));
+
+      sha256 digest_addkey = sha256::hash(join( { account.to_string(), string(device_key_pub_bytes.begin(),
+                                                                        device_key_pub_bytes.end()), extra_key, payer_str } ));
+
+      auto device_key_sign_app = device_key_priv.sign(digest_appaddkey);
+      auto device_key_sign = device_key_priv.sign(digest_addkey);
+
+      transfer(config::system_account_name, account, core_from_string("500.0000"), "initial tansfer");
+      auto account_balance_before = get_balance(account);
+
+      addkey(account, device_key_pub, device_key_sign, extra_key, payer_str, { permission_level{account, config::active_name} });
+      appaddkey(account, toadd_key_pub, device_key_sign_app, extra_key,
+                device_key_pub, device_key_sign_app, payer_str, auths_level);
+
+      auto ct = control->head_block_time();
+      produce_min_num_of_blocks_to_spend_time_wo_inactive_prod(fc::seconds(60 * 60 * 24));
+      produce_blocks_for_n_rounds(250);
+      auto account_balance_after = get_balance(account);
+      auto data = get_wait_tbl(account);
+
+      BOOST_REQUIRE_EQUAL(data["owner"].as_string(), account.to_string());
+      BOOST_REQUIRE_EQUAL(data["init_time"].as_string(), string(ct));
+      BOOST_REQUIRE_EQUAL(data["wait_time"].as_string(), string(ct + seconds(86400)));
+      BOOST_REQUIRE_EQUAL(data["action_account"].as_string(), TEST_CONTRACT.to_string());
+      BOOST_REQUIRE_EQUAL(data["action_name"].as_string(), "addkeywrap");
+      BOOST_REQUIRE_EQUAL(data["provided_approvals"].get_array().at(0).as_string(), string(device_key_pub));
    } FC_LOG_AND_RETHROW()
 }
 
