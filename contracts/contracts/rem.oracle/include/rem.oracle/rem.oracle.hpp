@@ -44,40 +44,41 @@ namespace eosio {
       [[eosio::action]]
       void setprice(const name& producer, const uint64_t& price);
 
+      [[eosio::action]]
+      void cleartable();
+
    private:
       static constexpr symbol core_symbol{"REM", 4};
       static constexpr name system_account = "rem"_n;
       static constexpr name system_token_account = "rem.token"_n;
 
       struct [[eosio::table]] remusd {
-         asset last_price;
-         asset active_price;
+         asset             price;
+         block_timestamp   last_update;
 
-         EOSLIB_SERIALIZE( remusd, (last_price)(last_price))
+         EOSLIB_SERIALIZE( remusd, (price))
       };
 
       typedef singleton<"remusd"_n, remusd> remusd_inx;
       remusd_inx remusd_tbl;
 
-      struct [[eosio::table]] price_data {
-         uint64_t                   key;
-         uint8_t                    round;
-         uint64_t                   median;
+      struct [[eosio::table]] pricedata {
+         uint64_t                   median = 0;
          std::map<name, uint64_t>   price_points;
-         block_timestamp            timestamp;
+         block_timestamp            last_update;
 
-         uint64_t primary_key() const { return key; }
-         uint64_t by_round() const { return round; }
+         pricedata(){}
 
-         EOSLIB_SERIALIZE( price_data, (key)(round)(median)(price_points)(timestamp))
+         EOSLIB_SERIALIZE( pricedata, (median)(price_points)(last_update))
       };
 
-      typedef multi_index<"pricedata"_n, price_data,
-                         indexed_by<"byround"_n, const_mem_fun < price_data, uint64_t, &price_data::by_round>>
-                         > price_data_inx;
-      price_data_inx price_data_tbl;
+      typedef singleton<"pricedata"_n, pricedata> pricedata_inx;
+
+      pricedata_inx pricedata_tbl;
+      pricedata price_data;
 
       string join(vector <string> &&vec, string delim = string("*"));
+      vector<name> get_map_keys(const std::map<name, uint64_t>& map_in)const;
       void to_rewards(const asset &quantity, const name& payer);
    };
    /** @}*/ // end of @defgroup eosioauth rem.oracle
