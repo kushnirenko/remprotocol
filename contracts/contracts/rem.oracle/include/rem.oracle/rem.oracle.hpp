@@ -20,12 +20,13 @@ namespace eosio {
    using std::vector;
 
    /**
-    * @defgroup eosioauth rem.oracle
+    * @defgroup eosiooracle rem.oracle
     * @ingroup eosiocontracts
     *
     * rem.oracle contract
     *
-    * @details rem.oracle contract defines the structures and actions that allow users and contracts to use .
+    * @details rem.oracle contract defines the structures and actions that allow users and contracts set/get current
+    * cryptocurrencies market price.
     * @{
     */
    class [[eosio::contract("rem.oracle")]] oracle : public contract {
@@ -34,57 +35,79 @@ namespace eosio {
       oracle(name receiver, name code,  datastream<const char*> ds);
 
       /**
-       * Add authentication key.
+       * Set the current market price of cryptocurrencies action.
        *
-       * @details .
+       * @details Set supported market price of cryptocurrencies.
        *
-       * @param user - the owner account to execute the addkey action for,
-       * @param device_pubkey - the public key corresponding to the new authentication device.
+       * @param producer - the producer account to execute the setprice action for,
+       * @param pairs_data - the pairs rate.
        */
       [[eosio::action]]
-      void setprice(const name& producer, const uint64_t& price);
+      void setprice(const name &producer, std::map<name, double> &pairs_data);
 
+      /**
+       * Add new supported pair name action.
+       *
+       * @details Add new supported pair name action, action permitted only for block producers.
+       *
+       * @param pair - the new supported pair name.
+       */
+      [[eosio::action]]
+      void addsuppdpair(const name &pair);
+
+      // Debug action.
       [[eosio::action]]
       void cleartable();
 
    private:
-      static constexpr symbol core_symbol{"REM", 4};
       static constexpr name system_account = "rem"_n;
-      static constexpr name system_token_account = "rem.token"_n;
 
-      struct [[eosio::table]] remusd {
-         asset             price;
-         block_timestamp   last_update;
+      struct [[eosio::table]] remprice {
+         name                    pair;
+         double                  price = 0;
+         vector<double>          price_points;
+         block_timestamp         last_update;
 
-         EOSLIB_SERIALIZE( remusd, (price))
+         uint64_t primary_key()const { return pair.value; }
+
+         // explicit serialization macro is not necessary, used here only to improve compilation time
+         EOSLIB_SERIALIZE( remprice, (pair)(price)(price_points)(last_update))
       };
-
-      typedef singleton<"remusd"_n, remusd> remusd_inx;
-      remusd_inx remusd_tbl;
 
       struct [[eosio::table]] pricedata {
-         uint64_t                   median = 0;
-         std::map<name, uint64_t>   price_points;
-         block_timestamp            last_update;
+         name                    producer;
+         std::map<name, double>  pairs_data;
+         block_timestamp         last_update;
 
-         pricedata(){}
+         uint64_t primary_key()const { return producer.value; }
 
-         EOSLIB_SERIALIZE( pricedata, (median)(price_points)(last_update))
+         // explicit serialization macro is not necessary, used here only to improve compilation time
+         EOSLIB_SERIALIZE( pricedata, (producer)(pairs_data)(last_update))
       };
 
-      typedef singleton<"pricedata"_n, pricedata> pricedata_inx;
+      struct [[eosio::table]] suppdpairs {
+         std::set<name> pairs {};
 
-      pricedata_inx pricedata_tbl;
-      pricedata price_data;
+         // explicit serialization macro is not necessary, used here only to improve compilation time
+         EOSLIB_SERIALIZE( suppdpairs, (pairs))
+      };
+
+      typedef multi_index< "remprice"_n, remprice>    remprice_inx;
+      typedef multi_index< "pricedata"_n, pricedata>  pricedata_inx;
+      typedef singleton< "suppdpairs"_n, suppdpairs>  pairs_inx;
+
+      pricedata_inx    pricedata_tbl;
+      remprice_inx     remprice_tbl;
+      pairs_inx        supported_pairs_tbl;
+      suppdpairs       suppdpairs_data;
 
       string join(vector <string> &&vec, string delim = string("*"));
-      vector<name> get_map_keys(const std::map<name, uint64_t>& map_in) const;
+      void check_supported_pairs(const std::map<name, double> &pairs);
       void to_rewards(const asset &quantity, const name& payer);
 
       uint8_t get_majority_amount() const;
-      vector<double> get_relevant_prices() const;
+      std::map<name, vector<double>> get_relevant_prices() const;
       bool is_producer( const name& user ) const;
-      vector<name> get_active_producers() const;
 
       double get_subset_median(vector<double> points) const;
       double get_median(const vector<double>& sorted_points) const;
