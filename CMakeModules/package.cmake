@@ -2,7 +2,7 @@ set(VENDOR "remme.io")
 set(PROJECT_NAME "remprotocol")
 set(DESC "Software for the REMME.IO network")
 set(URL "https://github.com/Remmeauth/remprotocol")
-set(EMAIL "support@remme.io")
+set(EMAIL "team@remme.io")
 
 configure_file(${CMAKE_SOURCE_DIR}/scripts/generate_package.sh.in ${CMAKE_BINARY_DIR}/packages/generate_package.sh @ONLY)
 configure_file(${CMAKE_SOURCE_DIR}/scripts/generate_bottle.sh ${CMAKE_BINARY_DIR}/packages/generate_bottle.sh COPYONLY)

@@ -21,13 +21,13 @@ include( SetupTargetMacros )
 include( InstallDirectoryPermissions )
 include( MASSigning )
 
-set( BLOCKCHAIN_NAME "EOSIO" )
+set( BLOCKCHAIN_NAME "REMME" )
 set( CMAKE_CXX_STANDARD 17 )
 set( CMAKE_CXX_EXTENSIONS ON )
 set( CXX_STANDARD_REQUIRED ON)
 
-set(VERSION_MAJOR 1)
-set(VERSION_MINOR 8)
+set(VERSION_MAJOR 0)
+set(VERSION_MINOR 1)
 set(VERSION_PATCH 1)
 #set(VERSION_SUFFIX develop)
 
@@ -120,7 +120,7 @@ link_libraries(Threads::Threads)
 
 if( WIN32 )
 
-    message( STATUS "Configuring EOSIO on WIN32")
+    message( STATUS "Configuring REM on WIN32")
     set( DB_VERSION 60 )
     set( BDB_STATIC_LIBS 1 )
 
