@@ -16,30 +16,80 @@ namespace eosio {
    void oracle::setprice(const name& producer, const uint64_t& price) {
       require_auth(producer);
       vector<name> _producers = eosio::get_active_producers();
-      bool is_producer = std::find(_producers.begin(), _producers.end(), producer) != _producers.end();
-      check(is_producer, "block producer authorization required");
+      bool is_active_producer = std::find(_producers.begin(), _producers.end(), producer) != _producers.end();
+      check(is_producer(producer), "block producer authorization required");
 
       price_data.price_points[producer] = price;
       price_data.last_update = current_time_point();
+
+      if (is_active_producer) {
+         vector<double> points = get_relevant_prices();
+         auto majority_amount = get_majority_amount();
+         if (points.size() > majority_amount) {
+            price_data.median = get_subset_median(points);
+         }
+      }
       pricedata_tbl.set(price_data, producer);
    }
 
-   uint64_t oracle::get_median(vector<int> points) {
-      uint8_t majority = (points.size() * 2 / 3) + 1;
-      std::sort(points.begin(), points.end());
-
-      vector<uint64_t> delta;
-      size_t q = 0;
-      for (size_t i = majority; i <= points.size(); ++i) {
-         delta.push_back(points[i] - points[q]);
-         ++q;
+   vector<double> oracle::get_relevant_prices() const {
+      vector<name> _producers = eosio::get_active_producers();
+      vector<double> relevant_prices;
+      for (const auto& prod: _producers) {
+         bool is_exist_point = price_data.price_points.find(prod) != price_data.price_points.end();
+         if (is_exist_point) {
+            relevant_prices.push_back(price_data.price_points.at(prod));
+         }
       }
-      uint64_t min_delta = std::min_element(delta.begin(), delta.end());
-      auto it = std::find(delta.begin(), delta.end(), min_delta);
-      int idx_min_delta = std::distance(delta.begin(), it);
+      return relevant_prices;
    }
 
-   vector<name> oracle::get_map_keys(const std::map<name, uint64_t>& map_in)const {
+   double oracle::get_subset_median(vector<double> points) const {
+      std::sort(points.begin(), points.end());
+      uint8_t majority = get_majority_amount();
+      uint8_t subset = 0;
+      double minDelta = points[majority] - points[0];
+      double crt;
+
+      for (uint8_t i = majority + 1; i < points.size(); ++i) {
+         crt = points[i] - points[i - majority];
+         if (minDelta > crt) {
+            minDelta = crt;
+            subset = i - majority;
+         }
+      }
+      double median = get_median(vector<double>(points.begin() + subset, points.begin() + subset + majority));
+
+      return median;
+   }
+
+   double oracle::get_median(const vector<double>& sorted_points) const {
+      if (sorted_points.size() % 2 == 0) {
+         return (sorted_points[sorted_points.size() / 2] + sorted_points[sorted_points.size() / 2 - 1]) / 2;
+      }
+      return sorted_points[sorted_points.size() / 2];
+   }
+
+   uint8_t oracle::get_majority_amount() const {
+      uint8_t prods_size = eosio::get_active_producers().size();
+      return (prods_size * 2 / 3) + 1;
+   }
+
+   bool oracle::is_producer( const name& user ) const {
+      eosiosystem::producers_table _producers_table( system_account, system_account.value );
+      return _producers_table.find( user.value ) != _producers_table.end();
+   }
+
+   vector<name> oracle::get_active_producers() const {
+      eosiosystem::producers_table _producers_table( system_account, system_account.value );
+      vector<name> producers;
+      for ( auto _table_itr = _producers_table.begin(); _table_itr != _producers_table.end(); ++_table_itr ) {
+         producers.push_back( _table_itr->owner );
+      }
+      return producers;
+   }
+
+   vector<name> oracle::get_map_keys(const std::map<name, uint64_t>& map_in) const {
       vector<name> keys;
 
       transform(map_in.begin(), map_in.end(), back_inserter(keys),
