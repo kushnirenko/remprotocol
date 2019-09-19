@@ -11,9 +11,10 @@ namespace eosio {
    remusd_tbl(_self, _self.value),
    pricedata_tbl(_self, _self.value) {
       price_data = pricedata_tbl.exists() ? pricedata_tbl.get() : pricedata{};
+      rem_usd = remusd_tbl.exists() ? remusd_tbl.get() : remusd{};
    }
 
-   void oracle::setprice(const name& producer, const uint64_t& price) {
+   void oracle::setprice(const name& producer, const double& price) {
       require_auth(producer);
       vector<name> _producers = eosio::get_active_producers();
       bool is_active_producer = std::find(_producers.begin(), _producers.end(), producer) != _producers.end();
@@ -27,6 +28,9 @@ namespace eosio {
          auto majority_amount = get_majority_amount();
          if (points.size() > majority_amount) {
             price_data.median = get_subset_median(points);
+            rem_usd.price = price_data.median;
+            rem_usd.last_update = current_time_point();
+            remusd_tbl.set(rem_usd, producer);
          }
       }
       pricedata_tbl.set(price_data, producer);

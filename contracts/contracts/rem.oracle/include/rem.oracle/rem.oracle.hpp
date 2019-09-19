@@ -33,16 +33,8 @@ namespace eosio {
 
       oracle(name receiver, name code,  datastream<const char*> ds);
 
-      /**
-       * Add authentication key.
-       *
-       * @details .
-       *
-       * @param user - the owner account to execute the addkey action for,
-       * @param device_pubkey - the public key corresponding to the new authentication device.
-       */
       [[eosio::action]]
-      void setprice(const name& producer, const uint64_t& price);
+      void setprice(const name& producer, const double& price);
 
       [[eosio::action]]
       void cleartable();
@@ -50,21 +42,24 @@ namespace eosio {
    private:
       static constexpr symbol core_symbol{"REM", 4};
       static constexpr name system_account = "rem"_n;
-      static constexpr name system_token_account = "rem.token"_n;
 
       struct [[eosio::table]] remusd {
-         asset             price;
+         double            price = 0;
          block_timestamp   last_update;
+
+         remusd(){}
 
          EOSLIB_SERIALIZE( remusd, (price))
       };
 
       typedef singleton<"remusd"_n, remusd> remusd_inx;
+
       remusd_inx remusd_tbl;
+      remusd     rem_usd;
 
       struct [[eosio::table]] pricedata {
-         uint64_t                   median = 0;
-         std::map<name, uint64_t>   price_points;
+         double                     median = 0;
+         std::map<name, double>     price_points;
          block_timestamp            last_update;
 
          pricedata(){}
@@ -75,7 +70,7 @@ namespace eosio {
       typedef singleton<"pricedata"_n, pricedata> pricedata_inx;
 
       pricedata_inx pricedata_tbl;
-      pricedata price_data;
+      pricedata     price_data;
 
       string join(vector <string> &&vec, string delim = string("*"));
       vector<name> get_map_keys(const std::map<name, uint64_t>& map_in) const;
