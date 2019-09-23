@@ -45,7 +45,7 @@ namespace eosio {
 
    // TODO: delete this when rem.utils will be merge and rem.utils.hpp include
    struct [[eosio::table]] swap_fee {
-     name chain;
+     name  chain;
      asset fee;
 
      uint64_t primary_key()const { return chain.value; }
@@ -55,7 +55,6 @@ namespace eosio {
    };
 
    typedef multi_index< "swapfee"_n, swap_fee> swap_fee_index;
-   //
    typedef eosio::singleton< "global"_n, eosio_global_state >   global_state_singleton;
 
    asset swap::get_min_account_stake() {
@@ -86,12 +85,11 @@ namespace eosio {
          }
       }
       const uint8_t majority = (_producers.size() * 2 / 3) + 1;
-      // TODO: uncomment this when swap bot will be in 2/3+1 prods
+      // TODO: uncomment this in mainnet and delete confirmed swap when 2 approval
 //      if ( majority <= quantity_active_appr ) { return true; }
 //         return false;
-      if ( 2 <= quantity_active_appr) { return true; }
-
-      return false;
+//      if ( 2 <= quantity_active_appr) { return true; }
+//      return false;
    }
 
    string swap::join( vector<string>&& vec, string delim ) {

@@ -13,9 +13,13 @@ namespace eosio {
 
    swap::swap(name receiver, name code,  datastream<const char*> ds) : contract(receiver, code, ds),
    swap_table(_self, _self.value),
-   p_reward_table(_self, _self.value){
+   p_reward_table(_self, _self.value),
+   chains_table(_self, _self.value) {
       if ( !p_reward_table.exists() ) {
          p_reward_table.set(prodsreward{}, _self);
+
+      } else if (chains_table.begin() == chains_table.end()) {
+         add_chain(supported_chains.at("ETH"), true, true);
       }
    }
 
@@ -28,7 +32,6 @@ namespace eosio {
       const asset producers_reward = p_reward_table.get().quantity;
 
       check_pubkey_prefix(swap_pubkey);
-//      validate_address(name(return_chain_id), return_address);
       check(quantity.is_valid(), "invalid quantity");
       check(quantity.symbol == min_account_stake.symbol, "symbol precision mismatch");
       check(quantity.amount >= min_account_stake.amount + producers_reward.amount, "the quantity must be greater "
@@ -43,7 +46,10 @@ namespace eosio {
       auto swap_hash_idx = swap_table.get_index<"byhash"_n>();
       auto swap_hash_itr = swap_hash_idx.find(swap_data::get_swap_hash(swap_hash));
 
-      check(time_point_sec(current_time_point()) < swap_timepoint + swap_lifetime, "swap lifetime expired");
+      auto swap_expiration_delta = current_time_point().time_since_epoch() - swap_lifetime.time_since_epoch();
+      check(time_point(swap_expiration_delta) < swap_timepoint, "swap lifetime expired");
+      check(current_time_point() + swap_active_lifetime > swap_timepoint, "swap cannot be initialized "
+                                                                          "with a future timestamp");
 
       const bool is_producer = is_block_producer(rampayer);
       if (swap_hash_itr == swap_hash_idx.end()) {
@@ -203,6 +209,28 @@ namespace eosio {
       p_reward_tbl.set(prodsreward{quantity}, rampayer);
    }
 
+   void swap::addchain(const name &chain_id, const bool &input, const bool &output) {
+      require_auth( _self );
+
+      auto it = chains_table.find(chain_id.value);
+      if (it == chains_table.end()) {
+         add_chain(chain_id, input, output);
+      } else {
+         chains_table.modify(*it, _self, [&](auto &c) {
+            c.input = input;
+            c.output = output;
+         });
+      }
+   }
+
+   void swap::add_chain(const name &chain_id, const bool &input, const bool &output) {
+      chains_table.emplace( _self, [&]( auto& c ) {
+         c.chain = chain_id;
+         c.input = input;
+         c.output = output;
+      });
+   }
+
    checksum256 swap::get_swap_id(const string &txid, const string &swap_pubkey_str, const asset &quantity,
                                  const string &return_address, const string &return_chain_id,
                                  const block_timestamp &swap_timestamp) {
@@ -249,7 +277,9 @@ namespace eosio {
       check(swap_hash_itr->status != static_cast<int8_t>(swap_status::FINISHED), "swap already finished");
 
       const time_point swap_timepoint = swap_hash_itr->swap_timestamp.to_time_point();
-      check(time_point_sec(current_time_point()) < swap_timepoint + swap_lifetime, "swap lifetime expired");
+      auto swap_expiration_delta = current_time_point().time_since_epoch() - swap_lifetime.time_since_epoch();
+      check(time_point(swap_expiration_delta) < swap_timepoint, "swap lifetime expired");
+
       check(is_swap_confirmed(swap_hash_itr->provided_approvals), "not enough active producers approvals");
    }
 

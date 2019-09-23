@@ -120,6 +120,7 @@ namespace eosio {
                         asset &quantity, const string &return_address, const string &return_chain_id,
                         const block_timestamp &swap_timestamp, const signature &sign);
 
+
       /**
        * Set block producers reward.
        *
@@ -129,6 +130,19 @@ namespace eosio {
        */
       [[eosio::action]]
       void setbpreward(const name &rampayer, const asset &quantity);
+
+
+      /**
+       * Add supported chain identifier.
+       *
+       * @details Add supported chain identifier, action permitted only for producers.
+       *
+       * @param chain_id - the chain identifier to be added,
+       * @param input - is supported input way to swap tokens according to chain identifier,
+       * @param output - is supported output way to swap tokens according to chain identifier.
+       */
+      [[eosio::action]]
+      void addchain(const name &chain_id, const bool &input, const bool &output);
 
 
       /**
@@ -166,18 +180,21 @@ namespace eosio {
       static constexpr name system_token_account = "rem.token"_n;
 
       const string remchain_id = "93ece941df27a5787a405383a66a7c26d04e80182adf504365710331ac0625a7";
+      const std::map <string, name> supported_chains = {
+         { "ETH", "ethropsten"_n },
+      };
 
       const time_point swap_lifetime = time_point(seconds(15552000)); // 180 days
       const time_point swap_active_lifetime = time_point(seconds(604800)); // 7 days
 
       struct [[eosio::table]] swap_data {
-         uint64_t key;
-         string txid;
-         checksum256 swap_id;
-         block_timestamp swap_timestamp;
-         int8_t status;
+         uint64_t          key;
+         string            txid;
+         checksum256       swap_id;
+         block_timestamp   swap_timestamp;
+         int8_t            status;
 
-         vector <name> provided_approvals;
+         vector <name>     provided_approvals;
 
          uint64_t primary_key() const { return key; }
 
@@ -205,13 +222,27 @@ namespace eosio {
          EOSLIB_SERIALIZE( prodsreward, (quantity))
       };
 
+      struct [[eosio::table]] chains {
+         name chain;
+         bool input;
+         bool output;
+
+         uint64_t primary_key() const { return chain.value; }
+
+         // explicit serialization macro is not necessary, used here only to improve compilation time
+         EOSLIB_SERIALIZE( chains, (chain)(input)(output))
+      };
+
       typedef multi_index<"swaps"_n, swap_data,
-            indexed_by<"byhash"_n, const_mem_fun < swap_data, fixed_bytes < 32>, &swap_data::by_swap_id>>
-      > swap_index;
+              indexed_by<"byhash"_n, const_mem_fun <swap_data, fixed_bytes<32>, &swap_data::by_swap_id>>
+              > swap_index;
       swap_index swap_table;
 
       typedef singleton<"prodsreward"_n, prodsreward> p_reward;
       p_reward p_reward_table;
+
+      typedef multi_index<"chains"_n, chains> chains_index;
+      chains_index chains_table;
 
       bool is_block_producer(const name &user);
       bool is_swap_confirmed(const vector <name> &provided_approvals);
@@ -229,6 +260,8 @@ namespace eosio {
       checksum256 sha256(const string &str) {
          return eosio::sha256(str.c_str(), str.size());
       }
+
+      void add_chain(const name &chain_id, const bool &input, const bool &output);
 
       void to_rewards(const asset &quantity);
       void retire_tokens(const asset &quantity, const string &memo);
