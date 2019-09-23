@@ -23,7 +23,7 @@ namespace eosio {
     *
     * rem.auth contract
     *
-    * @details rem.auth contract defines the structures and actions that allow users and contracts to use .
+    * @details rem.auth contract defines the structures and actions that allow users and contracts to store public keys.
     * @{
     */
    class [[eosio::contract("rem.auth")]] auth : public contract {
@@ -32,54 +32,53 @@ namespace eosio {
       auth(name receiver, name code,  datastream<const char*> ds);
 
       /**
-       * Add authentication key.
+       * Add new authentication key.
        *
-       * @details .
+       * @details Add new authentication key by user account.
        *
-       * @param user - the owner account to execute the addkey action for,
-       * @param device_pubkey - the public key corresponding to the new authentication device.
+       * @param account - the owner account to execute the addkeyacc action for,
+       * @param key - the public key that signed the payload,
+       * @param signed_by_key - the signature that sign payload by key,
+       * @param extra_key - the public key for authorization in external services,
+       * @param payer_str - the account from which resources are deducted.
        */
       [[eosio::action]]
-      void addkey(const name& account, const public_key& device_key, const signature& sign_device_key,
-                  const string& extra_key, const string& payer_str);
+      void addkeyacc(const name &account, const public_key &key, const signature &signed_by_key,
+                     const string &extra_key, const string &payer_str);
 
       /**
        * Add new device key.
        *
        * @details Add new authentication device.
        *
-       * @param user - the owner account to execute the adddevice action for,
-       * @param new_device_key - the public key corresponding to the new authentication device,
-       * @param sign - the signature that sign device by already exist device key.
+       * @param account - the owner account to execute the addkeyacc action for,
+       * @param new_key - the public key that will be added,
+       * @param signed_by_new_key - the signature that sign payload by new_key,
+       * @param extra_key - the public key for authorization in external services,
+       * @param key - the public key which is tied to the corresponding account,
+       * @param sign_by_key - the signature that sign payload by key,
+       * @param payer_str - the account from which resources are deducted.
        */
       [[eosio::action]]
-      void appaddkey(const name& account, const public_key& toadd_key, const signature& sign_toadd_key,
-                     const string& extra_key, const public_key& device_key, const signature& sign_device_key,
-                     const string& payer_str);
-
-      /**
-       * Add new device key.
-       *
-       * @details Add new authentication device.
-       *
-       * @param user - the owner account to execute the adddevice action for,
-       * @param new_device_key - the public key corresponding to the new authentication device,
-       * @param sign - the signature that sign device by already exist device key.
-       */
-      [[eosio::action]]
-      void addkeywrap(const name& user, const public_key& device_key, const string& app_key, const name& payer);
+      void addkeyapp(const name &account, const public_key &new_key, const signature &signed_by_new_key,
+                     const string &extra_key, const public_key &key, const signature &signed_by_key,
+                     const string &payer_str);
 
 
       [[eosio::action]]
-      void transfer(const name& from, const name& to, const asset& quantity,
-                    const public_key& device_key, const signature& sign_device_key);
+      void addkeywrap(const name &account, const public_key &key, const string &extra_key, const name &payer);
+
+
+      [[eosio::action]]
+      void transfer( const name &from, const name &to, const asset &quantity,
+                     const public_key &key, const signature &signed_by_key );
 
 
       [[eosio::action]]
       void cleartable( );
 
-      using addkey_action = action_wrapper<"addkey"_n, &auth::addkey>;
-      using appaddkey_action = action_wrapper<"appaddkey"_n, &auth::appaddkey>;
+      using addkeyacc_action = action_wrapper<"addkeyacc"_n, &auth::addkeyacc>;
+      using addkeyapp_action = action_wrapper<"addkeyapp"_n, &auth::addkeyapp>;
       using transfer_action = action_wrapper<"transfer"_n, &auth::transfer>;
       using addkeywrap_action = action_wrapper<"addkeywrap"_n, &auth::addkeywrap>;
 
@@ -93,24 +92,23 @@ namespace eosio {
       const time_point wait_confirm_time = time_point(seconds(wait_confirm_sec));
 
       struct [[eosio::table]] authkeys {
-         uint64_t          key;
+         uint64_t          N;
          name              owner;
-         public_key        device_key;
-         string            app_key;
+         public_key        key;
+         string            extra_key;
          block_timestamp   not_valid_before;
          block_timestamp   not_valid_after;
          uint32_t          revoked_at;
 
-         uint64_t primary_key() const { return key; }
+         uint64_t primary_key() const { return N; }
          uint64_t by_name() const { return owner.value; }
 
-
-         EOSLIB_SERIALIZE( authkeys, (key)(owner)(device_key)(app_key)(not_valid_before)(not_valid_after)(revoked_at))
+         EOSLIB_SERIALIZE( authkeys, (key)(owner)(key)(extra_key)(not_valid_before)(not_valid_after)(revoked_at))
       };
 
-      typedef multi_index< "authkeys"_n, authkeys,
+      typedef multi_index<"authkeys"_n, authkeys,
                           indexed_by<"byname"_n, const_mem_fun < authkeys, uint64_t, &authkeys::by_name>>
-                           > authkeys_inx;
+                          > authkeys_inx;
       authkeys_inx authkeys_tbl;
 
       struct [[eosio::table]] wait_confirm {
@@ -130,26 +128,26 @@ namespace eosio {
                                          (action_name)(action_data)(provided_approvals))
       };
 
-      typedef multi_index< "wait"_n, wait_confirm,
-                           indexed_by<"byname"_n, const_mem_fun < wait_confirm, uint64_t, &wait_confirm::by_name>>
-                           > wait_confirm_idx;
+      typedef multi_index<"wait"_n, wait_confirm,
+                          indexed_by<"byname"_n, const_mem_fun < wait_confirm, uint64_t, &wait_confirm::by_name>>
+                          > wait_confirm_idx;
       wait_confirm_idx wait_confirm_tbl;
 
       string join(vector <string> &&vec, string delim = string("*"));
-      void to_rewards(const asset &quantity, const name& payer);
-      void require_app_auth( const checksum256& digest, const name& user,
-                             const public_key& sign_pub_key, const signature& signature );
+      void to_rewards(const name& payer, const asset &quantity);
+      void require_app_auth( const checksum256 &digest, const name &user,
+                             const public_key &sign_pub_key, const signature &signature );
 
       template<class T>
       void boost_deferred_tx(const T& it, const action& acc, const public_key& device_key);
-      void send_deferred_tx( const action& act, const uint32_t& delay, const uint128_t& id );
+      void send_deferred_tx(const action &act, const uint32_t &delay, const uint128_t &id);
 
       void _addkey( const name& account, const public_key& device_key, const string& extra_key, const name& payer);
 
-      void add_wait_action( const name& account, const name& action_account, const name& action_name,
-                            const vector<char> action_data, const public_key& sign_pubkey, const time_point& ct );
-      auto get_wait_action_it(const name& account, const name& action_account,
-                              const name& action_name, const vector<char>& action_data);
+      void add_wait_action(const name &account, const name &action_account, const name &action_name,
+                           const vector<char> action_data, const public_key &sign_pubkey, const time_point &ct);
+      auto get_wait_action_it(const name &account, const name &action_account,
+                              const name &action_name, const vector<char> &action_data);
 
       checksum256 sha256(const string &str) {
          return eosio::sha256(str.c_str(), str.size());

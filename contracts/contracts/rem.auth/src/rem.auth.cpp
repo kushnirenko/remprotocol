@@ -11,22 +11,22 @@ namespace eosio {
                                                                       authkeys_tbl(_self, _self.value),
                                                                       wait_confirm_tbl(_self, _self.value) {};
 
-   void auth::addkey(const name& account, const public_key& device_key, const signature& sign_device_key,
-                     const string& extra_key, const string& payer_str) {
+   void auth::addkeyacc(const name &account, const public_key &key, const signature &signed_by_key,
+                        const string &extra_key, const string &payer_str) {
 
       name payer = payer_str.empty() ? account : name(payer_str);
       require_auth(account);
       require_auth(payer);
 
-      checksum256 digest = sha256(join( { account.to_string(), string(device_key.data.begin(),
-                                          device_key.data.end()), extra_key, payer_str } ));
-      assert_recover_key(digest, sign_device_key, device_key);
+      checksum256 digest = sha256(join( { account.to_string(), string(key.data.begin(),
+                                          key.data.end()), extra_key, payer_str } ));
+      assert_recover_key(digest, signed_by_key, key);
 
-      _addkey(account, device_key, extra_key, payer);
+      _addkey(account, key, extra_key, payer);
    }
 
-   auto auth::get_wait_action_it(const name& account, const name& action_account, const name& action_name,
-                                 const vector<char>& action_data) {
+   auto auth::get_wait_action_it(const name &account, const name &action_account,
+                                 const name &action_name, const vector<char> &action_data) {
       auto wait_idx = wait_confirm_tbl.get_index<"byname"_n>();
       auto it = wait_idx.find(account.value);
       if (it == wait_idx.end()) { return it; }
@@ -46,35 +46,35 @@ namespace eosio {
       return it;
    }
 
-   void auth::appaddkey( const name& account, const public_key& toadd_key, const signature& sign_toadd_key,
-                         const string& extra_key, const public_key& device_key, const signature& sign_device_key,
-                         const string& payer_str ) {
+   void auth::addkeyapp(const name &account, const public_key &new_key, const signature &signed_by_new_key,
+                        const string &extra_key, const public_key &key, const signature &signed_by_key,
+                        const string &payer_str) {
 
       auto wait_idx = wait_confirm_tbl.get_index<"byname"_n>();
-      checksum256 digest = sha256(join( { account.to_string(), string(toadd_key.data.begin(), toadd_key.data.end()),
-                                          string(device_key.data.begin(), device_key.data.end()), extra_key,
+      checksum256 digest = sha256(join( { account.to_string(), string(new_key.data.begin(), new_key.data.end()),
+                                          string(key.data.begin(), key.data.end()), extra_key,
                                           payer_str } ));
       name payer = payer_str.empty() ? account : name(payer_str);
-      require_app_auth(digest, account, device_key, sign_device_key);
-      assert_recover_key(digest, sign_toadd_key, toadd_key);
+      require_app_auth(digest, account, key, signed_by_key);
+      assert_recover_key(digest, signed_by_new_key, new_key);
 
       addkeywrap_action addkeywrap(_self, { _self, "active"_n });
-      action addkey_action = addkeywrap.to_action(account, toadd_key, extra_key, payer);
+      action addkey_action = addkeywrap.to_action(account, new_key, extra_key, payer);
       auto it = get_wait_action_it(account, _self, "addkeywrap"_n, addkey_action.data);
 
       if (it != wait_idx.end()) {
-         boost_deferred_tx(it, addkey_action, device_key);
+         boost_deferred_tx(it, addkey_action, key);
       } else {
          const time_point ct = current_time_point();
-         add_wait_action(account, _self, "addkeywrap"_n, addkey_action.data, device_key, ct);
+         add_wait_action(account, _self, "addkeywrap"_n, addkey_action.data, key, ct);
          send_deferred_tx(addkey_action, wait_confirm_sec, ct.sec_since_epoch() + account.value);
       }
    }
 
    template<class T>
-   void auth::boost_deferred_tx(const T& it, const action& acc, const public_key& device_key) {
+   void auth::boost_deferred_tx(const T &it, const action &act, const public_key &key) {
       bool is_already_approved = std::find( it->provided_approvals.begin(),
-                                            it->provided_approvals.end(), device_key
+                                            it->provided_approvals.end(), key
                                             ) == it->provided_approvals.end();
       check(is_already_approved, "approval already exists");
 
@@ -86,60 +86,59 @@ namespace eosio {
       time_point wait_time = time_point(seconds(wait_sec));
 
       wait_confirm_tbl.modify(*it, _self, [&](auto &w) { // TODO: change _self to it->owner
-         w.provided_approvals.push_back(device_key);
+         w.provided_approvals.push_back(key);
          w.wait_time = it->init_time.to_time_point() + wait_time;
       });
 
       uint128_t deferred_tx_id = it->init_time.to_time_point().sec_since_epoch() + it->owner.value;
       cancel_deferred(deferred_tx_id);
-      send_deferred_tx(acc, wait_sec, deferred_tx_id);
+      send_deferred_tx(act, wait_sec, deferred_tx_id);
    }
 
-   void auth::addkeywrap( const name& account, const public_key& device_key,
-                             const string& extra_key, const name& payer       ) {
+   void auth::addkeywrap(const name &account, const public_key &key, const string &extra_key, const name &payer) {
       require_auth(_self);
-      _addkey(account, device_key, extra_key, payer);
+      _addkey(account, key, extra_key, payer);
    }
 
-   void auth::_addkey( const name& account, const public_key& device_key,
-                       const string& extra_key, const name& payer        ) {
+   void auth::_addkey(const name& account, const public_key& key,
+                      const string& extra_key, const name& payer) {
 
       authkeys_tbl.emplace(payer, [&](auto &k) {
-         k.key = authkeys_tbl.available_primary_key();
+         k.N = authkeys_tbl.available_primary_key();
          k.owner = account;
-         k.device_key = device_key;
-         k.app_key = extra_key;
+         k.key = key;
+         k.extra_key = extra_key;
          k.not_valid_before = current_time_point();
          k.not_valid_after = current_time_point() + key_lifetime;
          k.revoked_at = 0; // if not revoked == 0
       });
-      to_rewards(prods_reward, payer);
+      to_rewards(payer, prods_reward);
    }
 
-   void auth::transfer( const name& from, const name& to, const asset& quantity,
-                        const public_key& device_key, const signature& sign_device_key ) {
+   void auth::transfer(const name &from, const name &to, const asset &quantity,
+                       const public_key &key, const signature &signed_by_key) {
 
       auto wait_idx = wait_confirm_tbl.get_index<"byname"_n>();
       checksum256 digest = sha256(join( { from.to_string(), to.to_string(), quantity.to_string(),
-                                          string(device_key.data.begin(), device_key.data.end()) } ));
+                                          string(key.data.begin(), key.data.end()) } ));
 
-      require_app_auth(digest, from, device_key, sign_device_key);
+      require_app_auth(digest, from, key, signed_by_key);
 
       token::transfer_action transfer(system_token_account, {from, "active"_n});
       action transfer_action = transfer.to_action(from, to, quantity, string("auth_app transfer"));
       auto it = get_wait_action_it(from, system_token_account, "transfer"_n, transfer_action.data);
       if (it != wait_idx.end()) {
-         boost_deferred_tx(it, transfer_action, device_key);
+         boost_deferred_tx(it, transfer_action, key);
       } else {
          const time_point ct = current_time_point();
-         add_wait_action(from, system_token_account, "transfer"_n, transfer_action.data, device_key, ct);
+         add_wait_action(from, system_token_account, "transfer"_n, transfer_action.data, key, ct);
          send_deferred_tx(transfer_action, wait_confirm_sec, ct.sec_since_epoch() + from.value);
       }
    }
 
 
-   void auth::require_app_auth( const checksum256& digest,           const name& user,
-                                const public_key& sign_pub_key, const signature& signature ) {
+   void auth::require_app_auth(const checksum256 &digest, const name &user,
+                               const public_key &sign_pub_key, const signature &signature) {
 
       auto authkeys_idx = authkeys_tbl.get_index<"byname"_n>();
       auto it = authkeys_idx.find(user.value);
@@ -155,7 +154,7 @@ namespace eosio {
 
          if ( is_before_time_valid || is_after_time_valid || is_revoked) {
             continue;
-         } else if (it->device_key == sign_pub_key) {
+         } else if (it->key == sign_pub_key) {
             break;
          }
       }
@@ -163,15 +162,15 @@ namespace eosio {
       assert_recover_key(digest, signature, sign_pub_key);
    }
 
-   void auth::send_deferred_tx( const action& act, const uint32_t& delay, const uint128_t& id ) {
+   void auth::send_deferred_tx( const action &act, const uint32_t &delay, const uint128_t &id ) {
       transaction t;
       t.actions.emplace_back(act);
       t.delay_sec = delay;
       t.send(id, _self);
    }
 
-   void auth::add_wait_action( const name& account, const name& action_account, const name& action_name,
-                               const vector<char> action_data, const public_key& sign_pubkey, const time_point& ct ) {
+   void auth::add_wait_action( const name &account, const name &action_account, const name &action_name,
+                               const vector<char> action_data, const public_key &sign_pubkey, const time_point &ct ) {
       wait_confirm_tbl.emplace(_self, [&](auto &w) { // TODO: change _self to account
          w.key = wait_confirm_tbl.available_primary_key();
          w.owner = account;
@@ -184,7 +183,7 @@ namespace eosio {
       });
    }
 
-   void auth::to_rewards(const asset &quantity, const name& payer) {
+   void auth::to_rewards(const name &payer, const asset &quantity) {
       eosiosystem::system_contract::torewards_action torewards(system_account, {payer, "active"_n});
       torewards.send(payer, quantity);
    }
@@ -197,11 +196,11 @@ namespace eosio {
    }
 
    void auth::cleartable( ) {
-
+      require_auth(_self);
       for (auto _table_itr = wait_confirm_tbl.begin(); _table_itr != wait_confirm_tbl.end();) {
          _table_itr = wait_confirm_tbl.erase(_table_itr);
       }
    }
 } /// namespace eosio
 
-EOSIO_DISPATCH( eosio::auth, (addkey)(cleartable)(appaddkey)(addkeywrap)(transfer) )
+EOSIO_DISPATCH( eosio::auth, (addkeyacc)(addkeyapp)(addkeywrap)(transfer)(cleartable) )
