@@ -166,6 +166,7 @@ namespace eosio {
       using finish_swap_and_create_acc_action = action_wrapper<"finishnewacc"_n, &swap::finishnewacc>;
       using cancel_swap_action = action_wrapper<"cancel"_n, &swap::cancel>;
       using set_bprewards_action = action_wrapper<"setbpreward"_n, &swap::setbpreward>;
+      using add_chain_action = action_wrapper<"addchain"_n, &swap::addchain>;
 
    private:
       enum class swap_status : int8_t {
@@ -244,10 +245,10 @@ namespace eosio {
       typedef multi_index<"chains"_n, chains> chains_index;
       chains_index chains_table;
 
-      bool is_block_producer(const name &user);
-      bool is_swap_confirmed(const vector <name> &provided_approvals);
+      bool is_block_producer(const name &user) const;
+      bool is_swap_confirmed(const vector <name> &provided_approvals) const;
       static asset get_min_account_stake();
-      asset get_swapbot_fee(const name &chain_id);
+      asset get_swapbot_fee(const name &chain_id) const;
 
       checksum256 get_swap_id(const string &txid, const string &swap_pubkey_str, const asset &quantity,
                               const string &return_address, const string &return_chain_id,
@@ -257,7 +258,7 @@ namespace eosio {
                                  const string &txid, const asset &quantity, const string &return_address,
                                  const string &return_chain_id, const block_timestamp &swap_timestamp);
 
-      checksum256 sha256(const string &str) {
+      checksum256 sha256(const string &str) const {
          return eosio::sha256(str.c_str(), str.size());
       }
 
@@ -270,13 +271,13 @@ namespace eosio {
       void create_user(const name &user, const public_key &owner_key,
                        const public_key &active_key, const asset &min_account_stake);
 
-      void validate_swap(const checksum256 &swap_hash);
+      void validate_swap(const checksum256 &swap_hash) const;
       void validate_address(const name &chain_id, const string &address);
-      void validate_pubkey(const signature &sign, const checksum256 &digest, const string &swap_pubkey_str);
+      void validate_pubkey(const signature &sign, const checksum256 &digest, const string &swap_pubkey_str) const;
       void cleanup_swaps();
 
-      string join(vector <string> &&vec, string delim = string("*"));
-      void check_pubkey_prefix(const string &pubkey_str);
+      string join(vector <string> &&vec, string delim = string("*")) const;
+      void check_pubkey_prefix(const string &pubkey_str) const;
    };
    /** @}*/ // end of @defgroup remswap rem.swap
 } /// namespace eosio

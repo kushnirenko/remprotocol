@@ -239,6 +239,17 @@ public:
       return r;
    }
 
+   auto addchain(const name& rampayer, const name &chain_id, const bool &input, const bool& output) {
+
+      auto r = base_tester::push_action(N(rem.swap), N(addchain), rampayer, mvo()
+         ("chain_id", chain_id)
+         ("input", input)
+         ("output", output)
+      );
+      produce_block();
+      return r;
+   }
+
    auto setbpreward(const name &rampayer, const asset &quantity) {
 
       auto r = base_tester::push_action(N(rem.swap), N(setbpreward), rampayer, mvo()
@@ -317,6 +328,11 @@ public:
       asset producers_reward;
       from_variant(get_singtable(N(rem.swap), N(prodsreward), "prodsreward")["quantity"], producers_reward);
       return producers_reward;
+   }
+
+   variant get_supported_chain(const name& chain) {
+      vector<char> data = get_row_by_account( N(rem.swap), N(rem.swap), N(chains), chain );
+      return data.empty() ? variant() : abi_ser.binary_to_variant("chains", data, abi_serializer_max_time);
    }
 
    asset get_min_account_stake() {
@@ -476,6 +492,13 @@ BOOST_FIXTURE_TEST_CASE(init_swap_test, swap_tester) {
       BOOST_REQUIRE_EQUAL("1", data["status"].as_string());
       // after issue tokens, balance rem.swap should be a before issue balance + amount of tokens to be a swapped
       BOOST_REQUIRE_EQUAL(before_init_balance + init_swap_data.quantity, after_init_balance);
+      // default producers reward
+      BOOST_REQUIRE_EQUAL(get_producers_reward(), _core_from_string("50.0000"));
+
+      auto supported_chains_data = get_supported_chain(N(ethropsten));
+      BOOST_REQUIRE_EQUAL(supported_chains_data["chain"].as_string(), "ethropsten");
+      BOOST_REQUIRE_EQUAL(supported_chains_data["input"].as_string(), "1");
+      BOOST_REQUIRE_EQUAL(supported_chains_data["output"].as_string(), "1");
 
       // action's authorizing actor 'fail' does not exist
       BOOST_REQUIRE_THROW(
@@ -502,6 +525,12 @@ BOOST_FIXTURE_TEST_CASE(init_swap_test, swap_tester) {
                                     init_swap_data.quantity,
                                     init_swap_data.return_address, init_swap_data.return_chain_id,
                                     time_point_sec::from_iso_string("2019-01-13T18:09:16.000")),
+                                    eosio_assert_message_exception);
+      // swap cannot be initialized with a future timestamp
+      BOOST_REQUIRE_THROW(init_swap(init_swap_data.rampayer, init_swap_data.txid, init_swap_data.swap_pubkey,
+                                    init_swap_data.quantity, init_swap_data.return_address,
+                                    init_swap_data.return_chain_id,
+                                    time_point_sec::from_iso_string("2020-01-13T18:09:16.000")),
                                     eosio_assert_message_exception);
       // block producer authorization required
       BOOST_REQUIRE_THROW(
@@ -1186,6 +1215,27 @@ BOOST_FIXTURE_TEST_CASE(set_block_producers_reward_test, swap_tester) {
       BOOST_REQUIRE_THROW(setbpreward(N(rem.swap), asset::from_string("-100.0000 REM")), eosio_assert_message_exception);
       // missing required authority
       BOOST_REQUIRE_THROW(setbpreward(N(proda), _core_from_string("100.0000")), missing_auth_exception);
+   } FC_LOG_AND_RETHROW()
+}
+
+BOOST_FIXTURE_TEST_CASE(add_chain_test, swap_tester) {
+   try {
+
+      addchain(N(rem.swap), N(ethropsten), true, true);
+
+      auto data = get_supported_chain(N(ethropsten));
+
+      BOOST_REQUIRE_EQUAL(data["chain"].as_string(), "ethropsten");
+      BOOST_REQUIRE_EQUAL(data["input"].as_string(), "1");
+      BOOST_REQUIRE_EQUAL(data["output"].as_string(), "1");
+
+      addchain(N(rem.swap), N(ethropsten), true, false);
+      data = get_supported_chain(N(ethropsten));
+
+      BOOST_REQUIRE_EQUAL(data["output"].as_string(), "0");
+
+      // missing required authority
+      BOOST_REQUIRE_THROW(addchain(N(proda), N(ethropsten), true, false), missing_auth_exception);
    } FC_LOG_AND_RETHROW()
 }
 

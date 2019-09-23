@@ -63,19 +63,19 @@ namespace eosio {
       return { static_cast<int64_t>( _gstate.min_account_stake ), core_symbol };
    }
 
-   asset swap::get_swapbot_fee(const name &chain_id) {
+   asset swap::get_swapbot_fee(const name &chain_id) const {
       swap_fee_index swap_fee("rem.utils"_n, "rem.utils"_n.value);
       auto fee_itr = swap_fee.find(chain_id.value);
       check(fee_itr != swap_fee.end(), "chain not supported");
       return fee_itr->fee;
    }
 
-   bool swap::is_block_producer( const name& user ) {
+   bool swap::is_block_producer( const name& user ) const {
       vector<name> _producers = eosio::get_active_producers();
       return std::find(_producers.begin(), _producers.end(), user) != _producers.end();
    }
 
-   bool swap::is_swap_confirmed( const vector<name>& provided_approvals ) {
+   bool swap::is_swap_confirmed( const vector<name>& provided_approvals ) const {
       vector<name> _producers = eosio::get_active_producers();
       uint8_t quantity_active_appr = 0;
       for (const auto& producer: provided_approvals) {
@@ -86,20 +86,20 @@ namespace eosio {
       }
       const uint8_t majority = (_producers.size() * 2 / 3) + 1;
       // TODO: uncomment this in mainnet and delete confirmed swap when 2 approval
-//      if ( majority <= quantity_active_appr ) { return true; }
-//         return false;
+      if ( majority <= quantity_active_appr ) { return true; }
+         return false;
 //      if ( 2 <= quantity_active_appr) { return true; }
 //      return false;
    }
 
-   string swap::join( vector<string>&& vec, string delim ) {
+   string swap::join( vector<string>&& vec, string delim ) const {
       return std::accumulate(std::next(vec.begin()), vec.end(), vec[0],
                             [&delim](string& a, string& b) {
                               return a + delim + b;
                             });
    }
 
-   void swap::check_pubkey_prefix(const string& pubkey_str) {
+   void swap::check_pubkey_prefix(const string& pubkey_str) const {
       string pubkey_pre = pubkey_str.substr(0, 3);
       check(pubkey_pre == "EOS" || pubkey_pre == "REM", "invalid type of public key");
    }

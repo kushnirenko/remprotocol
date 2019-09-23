@@ -262,12 +262,12 @@ namespace eosio {
       return digest;
    }
 
-   void swap::validate_pubkey(const signature &sign, const checksum256 &digest, const string &swap_pubkey_str) {
+   void swap::validate_pubkey(const signature &sign, const checksum256 &digest, const string &swap_pubkey_str) const {
       public_key swap_pubkey = string_to_public_key(swap_pubkey_str);
       assert_recover_key(digest, sign, swap_pubkey);
    }
 
-   void swap::validate_swap(const checksum256 &swap_hash) {
+   void swap::validate_swap(const checksum256 &swap_hash) const {
 
       auto swap_hash_idx = swap_table.get_index<"byhash"_n>();
       auto swap_hash_itr = swap_hash_idx.find(swap_data::get_swap_hash(swap_hash));
@@ -276,7 +276,7 @@ namespace eosio {
       check(swap_hash_itr->status != static_cast<int8_t>(swap_status::CANCELED), "swap already canceled");
       check(swap_hash_itr->status != static_cast<int8_t>(swap_status::FINISHED), "swap already finished");
 
-      const time_point swap_timepoint = swap_hash_itr->swap_timestamp.to_time_point();
+      time_point swap_timepoint = swap_hash_itr->swap_timestamp.to_time_point();
       auto swap_expiration_delta = current_time_point().time_since_epoch() - swap_lifetime.time_since_epoch();
       check(time_point(swap_expiration_delta) < swap_timepoint, "swap lifetime expired");
 
@@ -379,7 +379,7 @@ namespace eosio {
       retire.send(quantity, memo);
    }
 
-   void swap::issue_tokens(const name& rampayer, const asset &quantity) {
+   void swap::issue_tokens(const name &rampayer, const asset &quantity) {
       token::issue_action issue(system_token_account, {_self, "active"_n});
       issue.send(_self, quantity, string("swap issue tokens"));
    }
