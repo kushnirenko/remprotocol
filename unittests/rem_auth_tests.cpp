@@ -156,12 +156,12 @@ public:
       return r;
    }
 
-   auto addkey(const name& account, const crypto::public_key& device_key, const crypto::signature& sign_device_key,
-               const string& extra_key, const string& payer_str, const vector<permission_level>& auths) {
-      auto r = base_tester::push_action(TEST_CONTRACT, N(addkey), auths, mvo()
+   auto addkeyacc(const name& account, const crypto::public_key& key, const crypto::signature& signed_by_key,
+                  const string& extra_key, const string& payer_str, const vector<permission_level>& auths) {
+      auto r = base_tester::push_action(TEST_CONTRACT, N(addkeyacc), auths, mvo()
          ("account",  account)
-         ("device_key", device_key )
-         ("sign_device_key", sign_device_key )
+         ("key", key )
+         ("signed_by_key", signed_by_key )
          ("extra_key", extra_key )
          ("payer_str", payer_str )
       );
@@ -169,16 +169,16 @@ public:
       return r;
    }
 
-   auto appaddkey(const name& account, const crypto::public_key& toadd_key, const crypto::signature& sign_toadd_key,
-                  const string& extra_key, const crypto::public_key& device_key, const crypto::signature& sign_device_key,
+   auto addkeyapp(const name& account, const crypto::public_key& new_key, const crypto::signature& signed_by_new_key,
+                  const string& extra_key, const crypto::public_key& key, const crypto::signature& signed_by_key,
                   const string& payer_str, const vector<permission_level>& auths) {
-      auto r = base_tester::push_action(TEST_CONTRACT, N(appaddkey), auths, mvo()
+      auto r = base_tester::push_action(TEST_CONTRACT, N(addkeyapp), auths, mvo()
          ("account",  account)
-         ("toadd_key", toadd_key )
-         ("sign_toadd_key", sign_toadd_key )
+         ("new_key", new_key )
+         ("signed_by_new_key", signed_by_new_key )
          ("extra_key", extra_key )
-         ("device_key", device_key )
-         ("sign_device_key", sign_device_key )
+         ("key", key )
+         ("signed_by_key", signed_by_key )
          ("payer_str", payer_str )
       );
       produce_block();
@@ -329,34 +329,33 @@ BOOST_FIXTURE_TEST_CASE( addkey_test, auth_tester ) {
       name account = N(proda);
       vector<permission_level> auths_level = { permission_level{account, config::active_name} };
       updateauth(account, TEST_CONTRACT);
-      crypto::private_key device_key_priv = crypto::private_key::generate();
-      crypto::public_key device_key_pub = device_key_priv.get_public_key();
-      auto device_key_pub_bytes = from_base58(string(device_key_pub).substr(3));
-      device_key_pub_bytes.resize(33);
+      crypto::private_key key_priv = crypto::private_key::generate();
+      crypto::public_key key_pub = key_priv.get_public_key();
+      auto key_pub_bytes = from_base58(string(key_pub).substr(3));
+      key_pub_bytes.resize(33);
       string payer_str = "";
-//         generate_key_pair(device_key_pub, device_key_priv);
       string extra_key = "MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIZDXel8Nh0xnGOo39XE3Jqdi6iQpxRs\n"
                          "/r82O1HnpuJFd/jyM3iWInPZvmOnPCP3/Nx4fRNj1y0U9QFnlfefNeECAwEAAQ==";
 
-      sha256 digest = sha256::hash(join( { account.to_string(), string(device_key_pub_bytes.begin(),
-                                           device_key_pub_bytes.end()), extra_key, payer_str } ));
+      sha256 digest = sha256::hash(join( { account.to_string(), string(key_pub_bytes.begin(),
+                                           key_pub_bytes.end()), extra_key, payer_str } ));
 
-      auto device_key_sign = device_key_priv.sign(digest);
+      auto key_sign = key_priv.sign(digest);
 
       transfer(config::system_account_name, account, core_from_string("500.0000"), "initial tansfer");
       auto account_balance_before = get_balance(account);
 
-      addkey(N(proda), device_key_pub, device_key_sign, extra_key, payer_str, auths_level);
+      addkeyacc(N(proda), key_pub, key_sign, extra_key, payer_str, auths_level);
 
       auto account_balance_after = get_balance(account);
       auto data = get_authkeys_tbl(account);
 
       auto ct = control->head_block_time();
       BOOST_REQUIRE_EQUAL(data["owner"].as_string(), account.to_string());
-      BOOST_REQUIRE_EQUAL(data["device_key"].as_string(), string(device_key_pub));
+      BOOST_REQUIRE_EQUAL(data["key"].as_string(), string(key_pub));
       BOOST_REQUIRE_EQUAL(data["not_valid_before"].as_string(), string(ct));
       BOOST_REQUIRE_EQUAL(data["not_valid_after"].as_string(), string(ct + seconds(31104000))); // ct + 360 days
-      BOOST_REQUIRE_EQUAL(data["app_key"].as_string(), extra_key);
+      BOOST_REQUIRE_EQUAL(data["extra_key"].as_string(), extra_key);
       BOOST_REQUIRE_EQUAL(data["revoked_at"].as_string(), "0"); // if not revoke == 0
       BOOST_REQUIRE_EQUAL(account_balance_before - core_from_string("10.0000"), account_balance_after); // producers reward = 10
 
@@ -366,40 +365,40 @@ BOOST_FIXTURE_TEST_CASE( addkey_test, auth_tester ) {
       // transfer tokens to the payer for to_reward action
       transfer(config::system_account_name, payer, core_from_string("500.0000"), "initial tansfer");
       auto payer_balance_before = get_balance(payer);
-      digest = sha256::hash(join( { account.to_string(), string(device_key_pub_bytes.begin(),
-                                    device_key_pub_bytes.end()), extra_key, payer.to_string() } ));
+      digest = sha256::hash(join( { account.to_string(), string(key_pub_bytes.begin(),
+                                    key_pub_bytes.end()), extra_key, payer.to_string() } ));
 
-      device_key_sign = device_key_priv.sign(digest);
+      key_sign = key_priv.sign(digest);
 
-      addkey(N(proda), device_key_pub, device_key_sign, extra_key, payer.to_string(), auths_level);
+      addkeyacc(N(proda), key_pub, key_sign, extra_key, payer.to_string(), auths_level);
 
       data = get_authkeys_tbl(account);
       auto payer_balance_after = get_balance(payer);
 
       BOOST_REQUIRE_EQUAL(data["owner"].as_string(), account.to_string());
-      BOOST_REQUIRE_EQUAL(data["device_key"].as_string(), string(device_key_pub));
-      BOOST_REQUIRE_EQUAL(data["app_key"].as_string(), extra_key);
+      BOOST_REQUIRE_EQUAL(data["key"].as_string(), string(key_pub));
+      BOOST_REQUIRE_EQUAL(data["extra_key"].as_string(), extra_key);
       BOOST_REQUIRE_EQUAL(data["revoked_at"].as_string(), "0"); // if not revoke == 0
       BOOST_REQUIRE_EQUAL(payer_balance_before - core_from_string("10.0000"), payer_balance_after); // producers reward = 10
 
       // Action's authorizing actor 'fail' does not exist
       BOOST_REQUIRE_THROW(
-         addkey( N(proda), device_key_pub, device_key_sign, extra_key, payer.to_string(),
+         addkeyacc( N(proda), key_pub, key_sign, extra_key, payer.to_string(),
                  { permission_level{N(fail), config::active_name} } ),
                  transaction_exception);
       // Missing authority of prodb
       BOOST_REQUIRE_THROW(
-         addkey( N(proda), device_key_pub, device_key_sign, extra_key, payer.to_string(),
+         addkeyacc( N(proda), key_pub, key_sign, extra_key, payer.to_string(),
                  { permission_level{account, config::active_name} } ),
                  missing_auth_exception);
       // Error expected key different than recovered key
       BOOST_REQUIRE_THROW(
-         addkey( N(proda), get_public_key(payer, "active"), device_key_sign, extra_key, payer.to_string(), auths_level ),
+         addkeyacc( N(proda), get_public_key(payer, "active"), key_sign, extra_key, payer.to_string(), auths_level ),
                  crypto_api_exception);
       // overdrawn balance
       transfer(payer, config::system_account_name, core_from_string("485.0000"), "too small balance test");
       BOOST_REQUIRE_THROW(
-         addkey( N(proda), device_key_pub, device_key_sign, extra_key, payer.to_string(), auths_level ),
+         addkeyacc( N(proda), key_pub, key_sign, extra_key, payer.to_string(), auths_level ),
                  eosio_assert_message_exception);
    } FC_LOG_AND_RETHROW()
 }
@@ -409,47 +408,37 @@ BOOST_FIXTURE_TEST_CASE( appaddkey_test, auth_tester ) {
       name account = N(proda);
       vector<permission_level> auths_level = { permission_level{N(prodb), config::active_name} }; // prodb as a executor
       updateauth(account, TEST_CONTRACT);
-      crypto::private_key toadd_key_priv = crypto::private_key::generate();
-      crypto::private_key device_key_priv = crypto::private_key::generate();
-      crypto::public_key toadd_key_pub = toadd_key_priv.get_public_key();
-      crypto::public_key device_key_pub = device_key_priv.get_public_key();
-      auto device_key_pub_bytes = from_base58(string(device_key_pub).substr(3));
-      auto toadd_key_pub_bytes = from_base58(string(toadd_key_pub).substr(3));
-      toadd_key_pub_bytes.resize(33);
-      device_key_pub_bytes.resize(33);
+      crypto::private_key new_key_priv = crypto::private_key::generate();
+      crypto::private_key key_priv = crypto::private_key::generate();
+      crypto::public_key new_key_pub = new_key_priv.get_public_key();
+      crypto::public_key key_pub = key_priv.get_public_key();
+      auto key_pub_bytes = from_base58(string(key_pub).substr(3));
+      auto new_key_pub_bytes = from_base58(string(new_key_pub).substr(3));
+      new_key_pub_bytes.resize(33);
+      key_pub_bytes.resize(33);
       string payer_str = "";
       string extra_key = "MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIZDXel8Nh0xnGOo39XE3Jqdi6iQpxRs\n"
                          "/r82O1HnpuJFd/jyM3iWInPZvmOnPCP3/Nx4fRNj1y0U9QFnlfefNeECAwEAAQ==";
 
-      sha256 digest_appaddkey = sha256::hash(join( { account.to_string(), string(toadd_key_pub_bytes.begin(),
-                                                     toadd_key_pub_bytes.end()), string(device_key_pub_bytes.begin(),
-                                                     device_key_pub_bytes.end()), extra_key, payer_str } ));
+      sha256 digest_addkeyapp = sha256::hash(join( { account.to_string(), string(new_key_pub_bytes.begin(),
+                                                     new_key_pub_bytes.end()), extra_key, string(key_pub_bytes.begin(),
+                                                     key_pub_bytes.end()), payer_str } ));
 
-      sha256 digest_addkey = sha256::hash(join( { account.to_string(), string(device_key_pub_bytes.begin(),
-                                                                        device_key_pub_bytes.end()), extra_key, payer_str } ));
+      sha256 digest_addkeyacc = sha256::hash(join( { account.to_string(), string(key_pub_bytes.begin(),
+                                                                        key_pub_bytes.end()), extra_key, payer_str } ));
 
-      auto device_key_sign_app = device_key_priv.sign(digest_appaddkey);
-      auto device_key_sign = device_key_priv.sign(digest_addkey);
+      auto new_key_sign_app = new_key_priv.sign(digest_addkeyapp);
+      auto key_sign_app = key_priv.sign(digest_addkeyapp);
+      auto key_sign = key_priv.sign(digest_addkeyacc);
 
       transfer(config::system_account_name, account, core_from_string("500.0000"), "initial tansfer");
       auto account_balance_before = get_balance(account);
 
-      addkey(account, device_key_pub, device_key_sign, extra_key, payer_str, { permission_level{account, config::active_name} });
-      appaddkey(account, toadd_key_pub, device_key_sign_app, extra_key,
-                device_key_pub, device_key_sign_app, payer_str, auths_level);
+      addkeyacc(account, key_pub, key_sign, extra_key, payer_str, { permission_level{account, config::active_name} });
+      addkeyapp(account, new_key_pub, new_key_sign_app, extra_key,
+                key_pub, key_sign_app, payer_str, auths_level);
 
-      auto ct = control->head_block_time();
-      produce_min_num_of_blocks_to_spend_time_wo_inactive_prod(fc::seconds(60 * 60 * 24));
-      produce_blocks_for_n_rounds(250);
       auto account_balance_after = get_balance(account);
-      auto data = get_wait_tbl(account);
-
-      BOOST_REQUIRE_EQUAL(data["owner"].as_string(), account.to_string());
-      BOOST_REQUIRE_EQUAL(data["init_time"].as_string(), string(ct));
-      BOOST_REQUIRE_EQUAL(data["wait_time"].as_string(), string(ct + seconds(86400)));
-      BOOST_REQUIRE_EQUAL(data["action_account"].as_string(), TEST_CONTRACT.to_string());
-      BOOST_REQUIRE_EQUAL(data["action_name"].as_string(), "addkeywrap");
-      BOOST_REQUIRE_EQUAL(data["provided_approvals"].get_array().at(0).as_string(), string(device_key_pub));
    } FC_LOG_AND_RETHROW()
 }
 

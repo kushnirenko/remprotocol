@@ -117,11 +117,11 @@ namespace eosio {
          uint64_t primary_key() const { return N; }
          uint64_t by_name() const { return owner.value; }
 
-         EOSLIB_SERIALIZE( authkeys, (key)(owner)(key)(extra_key)(not_valid_before)(not_valid_after)(revoked_at))
+         EOSLIB_SERIALIZE( authkeys, (N)(owner)(key)(extra_key)(not_valid_before)(not_valid_after)(revoked_at))
       };
 
       struct [[eosio::table]] prodsreward {
-         asset quantity{500000, core_symbol};
+         asset quantity{100000, core_symbol};
 
          // explicit serialization macro is not necessary, used here only to improve compilation time
          EOSLIB_SERIALIZE( prodsreward, (quantity))
