@@ -33,13 +33,15 @@ namespace eosiosystem {
 
       // TODO implement as constexpr string
       static const auto stake_err = "user should stake at least "s + asset(producer_stake_threshold, core_symbol()).to_string() + " to become a producer"s;
-      check( does_satisfy_stake_requirement( producer ), stake_err );
 
       auto prod = _producers.find( producer.value );
       const auto ct = current_time_point();
 
       user_resources_table totals_tbl( _self, producer.value );
       const auto& tot = totals_tbl.get(producer.value, "producer must have resources");
+      const auto &voter = _voters.get(producer.value, "user has no resources");
+      check( voter.staked >= producer_stake_threshold, stake_err );
+
       if ( prod != _producers.end() ) {
          if (!prod->active()) {
             _gstate.total_producer_stake += tot.own_stake_amount;
@@ -81,11 +83,12 @@ namespace eosiosystem {
          _gstate.total_producer_stake += tot.own_stake_amount;
       }
 
-      const auto &voter = _voters.get(producer.value, "user has no resources");
-      _voters.modify(voter, producer, [&](auto &v) {
-         v.stake_lock_time = current_time_point() + _gstate.stake_lock_period;
-         v.locked_stake = tot.own_stake_amount;
-      });
+       const auto lock_time = voter.locked_stake >= system_contract::producer_stake_threshold ? current_time_point()
+                                                                                              : current_time_point() + _gstate.stake_lock_period;
+       _voters.modify(voter, producer, [&](auto &v) {
+           v.stake_lock_time = lock_time;
+           v.locked_stake = tot.own_stake_amount;
+       });
    }
 
    void system_contract::unregprod( const name& producer ) {
@@ -106,6 +109,7 @@ namespace eosiosystem {
       _producers.modify( prod, same_payer, [&]( producer_info& info ){
          info.deactivate();
       });
+
       _voters.modify(voter, producer, [&](auto &v) {
          v.stake_lock_time = current_time_point() + _gstate.stake_unlock_period;
       });
@@ -146,13 +150,13 @@ namespace eosiosystem {
    double system_contract::stake2vote( int64_t staked, time_point locked_stake_period ) const {
       check(locked_stake_period != time_point(), "vote should have mature time");
 
-      const auto seconds_to_mature = fmax( (locked_stake_period - current_time_point()).to_seconds(), 0.0 );
-      const auto rem_weight = 1.0 - seconds_to_mature / _gstate.stake_lock_period.to_seconds();
-      const double weight = int64_t((current_time_point().sec_since_epoch() - (block_timestamp::block_timestamp_epoch / 1000)) / (seconds_per_day * 7)) / double(52);
+      const auto weeks_to_mature = fmax( ((locked_stake_period - current_time_point()) - eosio::days(7)).count() / eosio::days(7).count(), 0.0 );
+      const auto rem_weight = 1.0 - (weeks_to_mature) / (_gstate.stake_lock_period.count() / eosio::days(7).count());
+      const double eos_weight = std::pow( 2, int64_t((current_time_point().sec_since_epoch() - (block_timestamp::block_timestamp_epoch / 1000)) / (seconds_per_day * 7)) / double(52) );
 
-      const auto vote_weight = double(staked) * weight * rem_weight;
-      
+      const auto vote_weight = double(staked) * eos_weight * rem_weight;
       check( vote_weight >= 0.0, "vote weight cannot be negative" );
+      
       return vote_weight;
    }
 
