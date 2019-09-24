@@ -22,12 +22,7 @@ void rem_oracle_plugin::set_program_options(options_description&, options_descri
 }
 
 void rem_oracle_plugin::plugin_initialize(const variables_map& options) {
-   try {
-      if( options.count( "option-name" )) {
-         // Handle the option
-      }
-   }
-   FC_LOG_AND_RETHROW()
+
 }
 
 void rem_oracle_plugin::plugin_startup() {
