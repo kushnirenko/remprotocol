@@ -27,25 +27,68 @@ namespace eosio {
 
       checksum256 digest = sha256(join( { account.to_string(), string(key.data.begin(),
                                           key.data.end()), extra_key, payer_str } ));
-      assert_recover_key(digest, signed_by_key, key);
+      eosio::assert_recover_key(digest, signed_by_key, key);
 
       _addkey(account, key, extra_key, payer);
+   }
+
+   auto auth::get_authkey_it(const name &account, const public_key &key) {
+      auto authkeys_idx = authkeys_tbl.get_index<"byname"_n>();
+      auto it = authkeys_idx.find(account.value);
+
+      for(; it != authkeys_idx.end(); ++it) {
+         auto ct = current_time_point();
+
+         bool is_before_time_valid = ct > it->not_valid_before.to_time_point();
+         bool is_after_time_valid = ct < it->not_valid_after.to_time_point();
+         bool is_revoked = it->revoked_at;
+
+         if (!is_before_time_valid || !is_after_time_valid || is_revoked) {
+            continue;
+         } else if (it->key == key) {
+            break;
+         }
+      }
+      return it;
    }
 
    void auth::addkeyapp(const name &account, const public_key &new_key, const signature &signed_by_new_key,
                         const string &extra_key, const public_key &key, const signature &signed_by_key,
                         const string &payer_str) {
 
+      name payer = payer_str.empty() ? account : name(payer_str);
       checksum256 digest = sha256(join( { account.to_string(), string(new_key.data.begin(), new_key.data.end()),
                                           extra_key, string(key.data.begin(), key.data.end()),
                                           payer_str } ));
-      name payer = payer_str.empty() ? account : name(payer_str);
-      require_app_auth(digest, account, key, signed_by_key);
 
-      public_key expected_new_key = recover_key(digest, signed_by_new_key);
-      check(expected_new_key == new_key, "expected key different than recovered new key");
+      check(assert_recover_key(digest, signed_by_new_key, new_key), "expected key different than recovered new key");
+      check(assert_recover_key(digest, signed_by_key, key), "expected key different than recovered user key");
+      require_app_auth(account, key);
 
       _addkey(account, new_key, extra_key, payer);
+   }
+
+   void auth::revokeacc(const name &account, const public_key &key) {
+      require_auth(account);
+      _revoke(account, key);
+   }
+
+   void auth::revokeapp(const name &account, const public_key &key, const signature &signed_by_key) {
+      checksum256 digest = sha256(join( { account.to_string(), string(key.data.begin(), key.data.end()) } ));
+      check(assert_recover_key(digest, signed_by_key, key), "expected key different than recovered user key");
+
+      _revoke(account, key);
+   }
+
+   void auth::_revoke(const name &account, const public_key &key) {
+      require_app_auth(account, key);
+
+      auto it = get_authkey_it(account, key);
+
+      time_point ct = current_time_point();
+      authkeys_tbl.modify(*it, _self, [&](auto &r) {
+         r.revoked_at = ct.sec_since_epoch();
+      });
    }
 
    void auth::transfer(const name &from, const name &to, const asset &quantity,
@@ -54,7 +97,8 @@ namespace eosio {
       checksum256 digest = sha256(join( { from.to_string(), to.to_string(), quantity.to_string(),
                                           string(key.data.begin(), key.data.end()) } ));
 
-      require_app_auth(digest, from, key, signed_by_key);
+      require_app_auth(from, key);
+      check(assert_recover_key(digest, signed_by_key, key), "expected key different than recovered user key");
 
       token::transfer_action transfer(system_token_account, {from, "active"_n});
       transfer.send(from, to, quantity, string("authentication app transfer"));
@@ -83,36 +127,24 @@ namespace eosio {
       to_rewards(payer, prods_reward.quantity);
    }
 
-   void auth::require_app_auth(const checksum256 &digest, const name &user,
-                               const public_key &pubkey, const signature &signature) {
-
+   void auth::require_app_auth(const name &account, const public_key &key) {
       auto authkeys_idx = authkeys_tbl.get_index<"byname"_n>();
-      auto it = authkeys_idx.find(user.value);
+      auto it = authkeys_idx.find(account.value);
 
       check(it != authkeys_idx.end(), "account has no linked app keys");
 
-      for(; it != authkeys_idx.end(); ++it) {
-         auto ct = current_time_point();
-
-         bool is_before_time_valid = ct > it->not_valid_before.to_time_point();
-         bool is_after_time_valid = ct < it->not_valid_after.to_time_point();
-         bool is_revoked = it->revoked_at && it->revoked_at < ct.sec_since_epoch();
-
-         if (!is_before_time_valid || !is_after_time_valid || is_revoked) {
-            continue;
-         } else if (it->key == pubkey) {
-            break;
-         }
-      }
+      it = get_authkey_it(account, key);
       check(it != authkeys_idx.end(), "account has no active app keys");
-
-      public_key expected_pubkey = recover_key(digest, signature);
-      check(expected_pubkey == pubkey, "expected key different than recovered user key");
    }
 
    void auth::to_rewards(const name &payer, const asset &quantity) {
       eosiosystem::system_contract::torewards_action torewards(system_account, {payer, "active"_n});
       torewards.send(payer, quantity);
+   }
+
+   bool auth::assert_recover_key(const checksum256 &digest, const signature &sign, const public_key &key) {
+      public_key expected_key = recover_key(digest, sign);
+      return expected_key == key;
    }
 
    string auth::join( vector<string>&& vec, string delim ) {
@@ -130,4 +162,4 @@ namespace eosio {
    }
 } /// namespace eosio
 
-EOSIO_DISPATCH( eosio::auth, (addkeyacc)(addkeyapp)(transfer)(setbpreward)(cleartable) )
+EOSIO_DISPATCH( eosio::auth, (addkeyacc)(addkeyapp)(revokeacc)(revokeapp)(transfer)(setbpreward)(cleartable) )

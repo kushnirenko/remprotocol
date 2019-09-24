@@ -66,6 +66,28 @@ namespace eosio {
                      const string &payer_str);
 
       /**
+       * Revoke active key.
+       *
+       * @details Revoke already added active key by user account.
+       *
+       * @param account - the owner account to execute the revokeacc action for,
+       * @param key - the public key which is tied to the corresponding account.
+       */
+      [[eosio::action]]
+      void revokeacc(const name &account, const public_key &key);
+
+      /**
+       * Revoke active key.
+       *
+       * @details Revoke already added active key by using correspond to account authentication key.
+       *
+       * @param account - the owner account to execute the revokeacc action for,
+       * @param key - the public key which is tied to the corresponding account,
+       * @param sign_by_key - the signature that sign payload by key.
+       */
+      [[eosio::action]]
+      void revokeapp(const name &account, const public_key &key, const signature &signed_by_key);
+      /**
        * Transfer action.
        *
        * @details Allows `from` account to transfer to `to` account the `quantity` tokens.
@@ -137,10 +159,13 @@ namespace eosio {
       p_reward p_reward_table;
       prodsreward prods_reward;
 
-      void _addkey( const name& account, const public_key& device_key, const string& extra_key, const name& payer);
-      void require_app_auth( const checksum256 &digest, const name &user,
-                             const public_key &sign_pub_key, const signature &signature );
+      void _addkey(const name& account, const public_key& device_key, const string& extra_key, const name& payer);
+      void _revoke(const name &account, const public_key &key);
 
+      auto get_authkey_it(const name &account, const public_key &key);
+      void require_app_auth(const name &account, const public_key &key);
+
+      bool assert_recover_key(const checksum256 &digest, const signature &sign, const public_key &key);
       void to_rewards(const name& payer, const asset &quantity);
 
       string join(vector <string> &&vec, string delim = string("*"));
