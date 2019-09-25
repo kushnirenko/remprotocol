@@ -41,6 +41,22 @@ class rem_oracle_plugin_impl {
    public:
      std::string _cryptocompare_apikey;
 
+     void start_monitor() {
+       while(true) {
+         try {
+           wlog("price monitor started");
+           double coingecko_price = get_coingecko_rem_price(coingecko_host, coingecko_endpoint);
+           wlog("avg coingecko: ${p}", ("p", coingecko_price));
+
+           double cryptocompare_price = get_cryptocompare_rem_price(cryptocompare_host.c_str(),
+                                                                   (cryptocompare_endpoint+cryptocompare_params+_cryptocompare_apikey).c_str());
+           wlog("avg cryptocompare: ${p}", ("p", cryptocompare_price));
+
+           sleep(update_price_period);
+         } FC_LOG_AND_RETHROW()
+       }
+     }
+
      std::string make_request(const char* host, const char* endpoint) {
          boost::asio::ssl::context ctx(boost::asio::ssl::context::sslv23);
          ctx.set_default_verify_paths();
@@ -122,7 +138,12 @@ void rem_oracle_plugin::plugin_initialize(const variables_map& options) {
 }
 
 void rem_oracle_plugin::plugin_startup() {
-
+    std::thread t2([=](){
+        try {
+          my->start_monitor();
+        } FC_LOG_AND_RETHROW()
+    });
+    t2.detach();
 }
 
 void rem_oracle_plugin::plugin_shutdown() {
