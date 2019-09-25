@@ -47,10 +47,11 @@ class rem_oracle_plugin_impl {
            wlog("price monitor started");
            double coingecko_price = get_coingecko_rem_price(coingecko_host, coingecko_endpoint);
            wlog("avg coingecko: ${p}", ("p", coingecko_price));
-
-           double cryptocompare_price = get_cryptocompare_rem_price(cryptocompare_host.c_str(),
-                                                                   (cryptocompare_endpoint+cryptocompare_params+_cryptocompare_apikey).c_str());
-           wlog("avg cryptocompare: ${p}", ("p", cryptocompare_price));
+           if(_cryptocompare_apikey != "0") {
+             double cryptocompare_price = get_cryptocompare_rem_price(cryptocompare_host,
+                                                                     (string(cryptocompare_endpoint)+string(cryptocompare_params)+_cryptocompare_apikey).c_str());
+             wlog("avg cryptocompare: ${p}", ("p", cryptocompare_price));
+           }
 
            sleep(update_price_period);
          } FC_LOG_AND_RETHROW()
@@ -119,7 +120,7 @@ rem_oracle_plugin::~rem_oracle_plugin(){}
 
 void rem_oracle_plugin::set_program_options(options_description&, options_description& cfg) {
   cfg.add_options()
-        ("cryptocompare-apikey", bpo::value<std::string>()->default_value(""),
+        ("cryptocompare-apikey", bpo::value<std::string>()->default_value(std::string("0")),  // doesn't accept empty strings
          "cryptocompare api key for reading REM token price")
 
         ("update_price_period", bpo::value<uint32_t>()->default_value(update_price_period), "")
