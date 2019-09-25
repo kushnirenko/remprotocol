@@ -33,53 +33,6 @@ struct rem_genesis_account {
    uint64_t     initial_balance;
 };
 
-std::vector<rem_genesis_account> genesis_test( {
-  {N(b1),        100'000'000'0000ll},
-  {N(whale1),     40'000'000'0000ll},
-  {N(whale2),     30'000'000'0000ll},
-  {N(whale3),     20'000'000'0000ll},
-  {N(proda),         500'000'0000ll},
-  {N(prodb),         500'000'0000ll},
-  {N(prodc),         500'000'0000ll},
-  {N(prodd),         500'000'0000ll},
-  {N(prode),         500'000'0000ll},
-  {N(prodf),         500'000'0000ll},
-  {N(prodg),         500'000'0000ll},
-  {N(prodh),         500'000'0000ll},
-  {N(prodi),         500'000'0000ll},
-  {N(prodj),         500'000'0000ll},
-  {N(prodk),         500'000'0000ll},
-  {N(prodl),         500'000'0000ll},
-  {N(prodm),         500'000'0000ll},
-  {N(prodn),         500'000'0000ll},
-  {N(prodo),         500'000'0000ll},
-  {N(prodp),         500'000'0000ll},
-  {N(prodq),         500'000'0000ll},
-  {N(prodr),         500'000'0000ll},
-  {N(prods),         500'000'0000ll},
-  {N(prodt),         500'000'0000ll},
-  {N(produ),         500'000'0000ll},
-  {N(runnerup1),     200'000'0000ll},
-  {N(runnerup2),     150'000'0000ll},
-  {N(runnerup3),     100'000'0000ll},
-});
-
-const char* SYMBOL_CORE_NAME = "REM";
-const name TEST_CONTRACT = N(rem.auth);
-
-symbol CORE_SYMBOL_STR(4, SYMBOL_CORE_NAME);
-
-asset _core_from_string(const string &s) {
-   return asset::from_string(s + " " + SYMBOL_CORE_NAME);
-}
-
-string join(vector<string> &&vec, string delim = string("*")) {
-   return std::accumulate(std::next(vec.begin()), vec.end(), vec[0],
-                          [&delim](string &a, string &b) {
-                             return a + delim + b;
-                          });
-}
-
 class auth_tester : public TESTER {
 public:
    auth_tester();
@@ -158,7 +111,7 @@ public:
 
    auto addkeyacc(const name& account, const crypto::public_key& key, const crypto::signature& signed_by_key,
                   const string& extra_key, const string& payer_str, const vector<permission_level>& auths) {
-      auto r = base_tester::push_action(TEST_CONTRACT, N(addkeyacc), auths, mvo()
+      auto r = base_tester::push_action(N(rem.auth), N(addkeyacc), auths, mvo()
          ("account",  account)
          ("key", key )
          ("signed_by_key", signed_by_key )
@@ -172,7 +125,7 @@ public:
    auto addkeyapp(const name& account, const crypto::public_key& new_key, const crypto::signature& signed_by_new_key,
                   const string& extra_key, const crypto::public_key& key, const crypto::signature& signed_by_key,
                   const string& payer_str, const vector<permission_level>& auths) {
-      auto r = base_tester::push_action(TEST_CONTRACT, N(addkeyapp), auths, mvo()
+      auto r = base_tester::push_action(N(rem.auth), N(addkeyapp), auths, mvo()
          ("account",  account)
          ("new_key", new_key )
          ("signed_by_new_key", signed_by_new_key )
@@ -197,14 +150,14 @@ public:
    }
 
    variant get_authkeys_tbl( const name& account ) {
-//      vector<char> data = get_row_by_account( TEST_CONTRACT, TEST_CONTRACT, N(authkeys), account );
-      return get_singtable(TEST_CONTRACT, N(authkeys), "authkeys");
+//      vector<char> data = get_row_by_account( N(rem.auth), N(rem.auth), N(authkeys), account );
+      return get_singtable(N(rem.auth), N(authkeys), "authkeys");
    }
 
    variant get_wait_tbl( const name& account ) {
-//      vector<char> data = get_row_by_account( TEST_CONTRACT, TEST_CONTRACT, N(wait), account );
+//      vector<char> data = get_row_by_account( N(rem.auth), N(rem.auth), N(wait), account );
 //      return data.empty() ? fc::variant() : abi_ser.binary_to_variant( "wait_confirm", data, abi_serializer_max_time );
-      return get_singtable(TEST_CONTRACT, N(wait), "wait_confirm");
+      return get_singtable(N(rem.auth), N(wait), "wait_confirm");
    }
 
    variant get_singtable(const name& contract, const name &table, const string &type) {
@@ -240,7 +193,7 @@ public:
       wdump((account));
       set_code(account, wasm, signer);
       set_abi(account, abi, signer);
-      if (account == TEST_CONTRACT) {
+      if (account == N(rem.auth)) {
          const auto& accnt = control->db().get<account_object,by_name>( account );
          abi_def abi_definition;
          BOOST_REQUIRE_EQUAL(abi_serializer::to_abi(accnt.abi, abi_definition), true);
@@ -249,12 +202,19 @@ public:
       produce_blocks();
    }
 
+   string join(vector<string> &&vec, string delim = string("*")) {
+      return std::accumulate(std::next(vec.begin()), vec.end(), vec[0],
+                             [&delim](string &a, string &b) {
+                                return a + delim + b;
+                             });
+   }
+
    abi_serializer abi_ser;
 };
 
 auth_tester::auth_tester() {
    // Create rem.msig and rem.token, rem.auth
-   create_accounts({N(rem.msig), N(rem.token), N(rem.ram), N(rem.ramfee), N(rem.stake), N(rem.bpay), N(rem.spay), N(rem.vpay), N(rem.saving), TEST_CONTRACT });
+   create_accounts({N(rem.msig), N(rem.token), N(rem.ram), N(rem.ramfee), N(rem.stake), N(rem.bpay), N(rem.spay), N(rem.vpay), N(rem.saving), N(rem.auth) });
 
    // Register producers
    const auto producer_candidates = {
@@ -273,7 +233,7 @@ auth_tester::auth_tester() {
    set_code_abi(N(rem.token),
                 contracts::rem_token_wasm(),
                 contracts::rem_token_abi().data()); //, &rem_active_pk);
-   set_code_abi(TEST_CONTRACT,
+   set_code_abi(N(rem.auth),
                 contracts::rem_auth_wasm(),
                 contracts::rem_auth_abi().data()); //, &rem_active_pk);
 
@@ -301,6 +261,37 @@ auth_tester::auth_tester() {
    auto actual = get_balance(config::system_account_name);
    BOOST_REQUIRE_EQUAL(initial_supply, actual);
 
+   std::vector<rem_genesis_account> genesis_test( {
+  {N(b1),        100'000'000'0000ll},
+  {N(whale1),     40'000'000'0000ll},
+  {N(whale2),     30'000'000'0000ll},
+  {N(whale3),     20'000'000'0000ll},
+  {N(proda),         500'000'0000ll},
+  {N(prodb),         500'000'0000ll},
+  {N(prodc),         500'000'0000ll},
+  {N(prodd),         500'000'0000ll},
+  {N(prode),         500'000'0000ll},
+  {N(prodf),         500'000'0000ll},
+  {N(prodg),         500'000'0000ll},
+  {N(prodh),         500'000'0000ll},
+  {N(prodi),         500'000'0000ll},
+  {N(prodj),         500'000'0000ll},
+  {N(prodk),         500'000'0000ll},
+  {N(prodl),         500'000'0000ll},
+  {N(prodm),         500'000'0000ll},
+  {N(prodn),         500'000'0000ll},
+  {N(prodo),         500'000'0000ll},
+  {N(prodp),         500'000'0000ll},
+  {N(prodq),         500'000'0000ll},
+  {N(prodr),         500'000'0000ll},
+  {N(prods),         500'000'0000ll},
+  {N(prodt),         500'000'0000ll},
+  {N(produ),         500'000'0000ll},
+  {N(runnerup1),     200'000'0000ll},
+  {N(runnerup2),     150'000'0000ll},
+  {N(runnerup3),     100'000'0000ll},
+});
+
    // Create genesis accounts
    for( const auto& account : genesis_test ) {
       create_account( account.name, config::system_account_name );
@@ -319,7 +310,7 @@ auth_tester::auth_tester() {
    for( const auto& producer : producer_candidates ) {
       register_producer(producer);
    }
-   updateauth(TEST_CONTRACT, TEST_CONTRACT);
+   updateauth(N(rem.auth), N(rem.auth));
 }
 
 BOOST_AUTO_TEST_SUITE(rem_auth_tests)
@@ -328,7 +319,7 @@ BOOST_FIXTURE_TEST_CASE( addkey_test, auth_tester ) {
    try {
       name account = N(proda);
       vector<permission_level> auths_level = { permission_level{account, config::active_name} };
-      updateauth(account, TEST_CONTRACT);
+      updateauth(account, N(rem.auth));
       crypto::private_key key_priv = crypto::private_key::generate();
       crypto::public_key key_pub = key_priv.get_public_key();
       auto key_pub_bytes = from_base58(string(key_pub).substr(3));
@@ -407,7 +398,7 @@ BOOST_FIXTURE_TEST_CASE( appaddkey_test, auth_tester ) {
    try {
       name account = N(proda);
       vector<permission_level> auths_level = { permission_level{N(prodb), config::active_name} }; // prodb as a executor
-      updateauth(account, TEST_CONTRACT);
+      updateauth(account, N(rem.auth));
       crypto::private_key new_key_priv = crypto::private_key::generate();
       crypto::private_key key_priv = crypto::private_key::generate();
       crypto::public_key new_key_pub = new_key_priv.get_public_key();

@@ -3,6 +3,7 @@
  */
 
 #include <rem.auth/rem.auth.hpp>
+#include <../../rem.swap/src/base58.cpp> // TODO: fix includes
 #include <rem.system/rem.system.hpp>
 #include <rem.token/rem.token.hpp>
 
@@ -18,15 +19,15 @@ namespace eosio {
        prods_reward = p_reward_table.get();
     };
 
-   void auth::addkeyacc(const name &account, const public_key &key, const signature &signed_by_key,
+   void auth::addkeyacc(const name &account, const string &key_str, const signature &signed_by_key,
                         const string &extra_key, const string &payer_str) {
 
       name payer = payer_str.empty() ? account : name(payer_str);
       require_auth(account);
       require_auth(payer);
 
-      checksum256 digest = sha256(join( { account.to_string(), string(key.data.begin(),
-                                          key.data.end()), extra_key, payer_str } ));
+      public_key key = string_to_public_key(key_str);
+      checksum256 digest = sha256(join( { account.to_string(), key_str, extra_key, payer_str } ));
       eosio::assert_recover_key(digest, signed_by_key, key);
 
       _addkey(account, key, extra_key, payer);
@@ -52,15 +53,15 @@ namespace eosio {
       return it;
    }
 
-   void auth::addkeyapp(const name &account, const public_key &new_key, const signature &signed_by_new_key,
-                        const string &extra_key, const public_key &key, const signature &signed_by_key,
+   void auth::addkeyapp(const name &account, const string &new_key_str, const signature &signed_by_new_key,
+                        const string &extra_key, const string &key_str, const signature &signed_by_key,
                         const string &payer_str) {
 
       name payer = payer_str.empty() ? account : name(payer_str);
-      checksum256 digest = sha256(join( { account.to_string(), string(new_key.data.begin(), new_key.data.end()),
-                                          extra_key, string(key.data.begin(), key.data.end()),
-                                          payer_str } ));
+      checksum256 digest = sha256(join( { account.to_string(), new_key_str, extra_key, key_str, payer_str } ));
 
+      public_key new_key = string_to_public_key(new_key_str);
+      public_key key = string_to_public_key(key_str);
       check(assert_recover_key(digest, signed_by_new_key, new_key), "expected key different than recovered new key");
       check(assert_recover_key(digest, signed_by_key, key), "expected key different than recovered user key");
       require_app_auth(account, key);
@@ -68,13 +69,15 @@ namespace eosio {
       _addkey(account, new_key, extra_key, payer);
    }
 
-   void auth::revokeacc(const name &account, const public_key &key) {
+   void auth::revokeacc(const name &account, const string &key_str) {
       require_auth(account);
+      public_key key = string_to_public_key(key_str);
       _revoke(account, key);
    }
 
-   void auth::revokeapp(const name &account, const public_key &key, const signature &signed_by_key) {
-      checksum256 digest = sha256(join( { account.to_string(), string(key.data.begin(), key.data.end()) } ));
+   void auth::revokeapp(const name &account, const string &key_str, const signature &signed_by_key) {
+      public_key key = string_to_public_key(key_str);
+      checksum256 digest = sha256(join( { account.to_string(), key_str } ));
       check(assert_recover_key(digest, signed_by_key, key), "expected key different than recovered user key");
 
       _revoke(account, key);
@@ -92,11 +95,11 @@ namespace eosio {
    }
 
    void auth::transfer(const name &from, const name &to, const asset &quantity,
-                       const public_key &key, const signature &signed_by_key) {
+                       const string &key_str, const signature &signed_by_key) {
 
-      checksum256 digest = sha256(join( { from.to_string(), to.to_string(), quantity.to_string(),
-                                          string(key.data.begin(), key.data.end()) } ));
+      checksum256 digest = sha256(join( { from.to_string(), to.to_string(), quantity.to_string(), key_str } ));
 
+      public_key key = string_to_public_key(key_str);
       require_app_auth(from, key);
       check(assert_recover_key(digest, signed_by_key, key), "expected key different than recovered user key");
 

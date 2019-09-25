@@ -44,7 +44,7 @@ namespace eosio {
        * @param payer_str - the account from which resources are debited.
        */
       [[eosio::action]]
-      void addkeyacc(const name &account, const public_key &key, const signature &signed_by_key,
+      void addkeyacc(const name &account, const string &key_str, const signature &signed_by_key,
                      const string &extra_key, const string &payer_str);
 
       /**
@@ -61,8 +61,8 @@ namespace eosio {
        * @param payer_str - the account from which resources are debited.
        */
       [[eosio::action]]
-      void addkeyapp(const name &account, const public_key &new_key, const signature &signed_by_new_key,
-                     const string &extra_key, const public_key &key, const signature &signed_by_key,
+      void addkeyapp(const name &account, const string &new_key_str, const signature &signed_by_new_key,
+                     const string &extra_key, const string &key_str, const signature &signed_by_key,
                      const string &payer_str);
 
       /**
@@ -74,7 +74,7 @@ namespace eosio {
        * @param key - the public key which is tied to the corresponding account.
        */
       [[eosio::action]]
-      void revokeacc(const name &account, const public_key &key);
+      void revokeacc(const name &account, const string &key_str);
 
       /**
        * Revoke active key.
@@ -86,7 +86,7 @@ namespace eosio {
        * @param sign_by_key - the signature that sign payload by key.
        */
       [[eosio::action]]
-      void revokeapp(const name &account, const public_key &key, const signature &signed_by_key);
+      void revokeapp(const name &account, const string &key_str, const signature &signed_by_key);
       /**
        * Transfer action.
        *
@@ -101,7 +101,7 @@ namespace eosio {
        */
       [[eosio::action]]
       void transfer(const name &from, const name &to, const asset &quantity,
-                    const public_key &key, const signature &signed_by_key);
+                    const string &key_str, const signature &signed_by_key);
 
       /**
        * Set block producers reward.
@@ -119,6 +119,8 @@ namespace eosio {
 
       using addkeyacc_action = action_wrapper<"addkeyacc"_n, &auth::addkeyacc>;
       using addkeyapp_action = action_wrapper<"addkeyapp"_n, &auth::addkeyapp>;
+      using revokeacc_action = action_wrapper<"revokeacc"_n, &auth::revokeacc>;
+      using revokeapp_action = action_wrapper<"revokeapp"_n, &auth::revokeapp>;
       using transfer_action = action_wrapper<"transfer"_n, &auth::transfer>;
 
    private:
