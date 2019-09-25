@@ -6,10 +6,10 @@
 
 using boost::asio::ip::tcp;
 
-class client
+class http_client
 {
 public:
-    client(boost::asio::io_service& io_service,
+    http_client(boost::asio::io_service& io_service,
            boost::asio::ssl::context& context,
            const std::string& server, const std::string& path);
 
