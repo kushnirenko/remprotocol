@@ -28,6 +28,8 @@ systemAccounts = [
     'rem.vpay',
     'rem.rex',
     'rem.swap',
+    'test.oracle',
+    'rem.oracle'
 ]
 
 def jsonArg(a):
@@ -124,7 +126,8 @@ def startNode(nodeIndex, account):
         '    --plugin eosio::producer_plugin'
         '    --plugin eosio::eth_swap_plugin'
         '    --plugin eosio::rem_oracle_plugin'
-        '    --cryptocompare-apikey 3149f5165071436773542056dc30d8ec7d4ba986968c51e46103c19a212a21ed'
+        '    --oracle-authority producer111a@active'
+        '    --oracle-signing-key 5KLGj1HGRWbk5xNmoKfrcrQHXvcVJBPdAckoiJgFftXSJjLPp7b'
         '    --swap-signing-key 5KLGj1HGRWbk5xNmoKfrcrQHXvcVJBPdAckoiJgFftXSJjLPp7b'
         '    --swap-authority producer111a@active'
         '    --eth-wss-provider wss://ropsten.infura.io/ws/v3/3f98ae6029094659ac8f57f66e673129' +
@@ -270,6 +273,8 @@ def stepInstallSystemContracts():
     run(args.remcli + 'set contract rem.token ' + args.contracts_dir + '/rem.token/')
     run(args.remcli + 'set contract rem.msig ' + args.contracts_dir + '/rem.msig/')
     run(args.remcli + 'set contract rem.swap ' + args.contracts_dir + '/rem.swap/')
+    run(args.remcli + 'set contract test.oracle ' + args.contracts_dir + '/rem.oracle/')
+    run(args.remcli + 'set contract rem.oracle ' + args.contracts_dir + '/rem.oracle/')
 def stepCreateTokens():
     totalAllocation = 1_000_000_000_0000
     run(args.remcli + 'push action rem.token create \'["rem", "%s"]\' -p rem.token' % intToCurrency(totalAllocation))

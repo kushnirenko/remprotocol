@@ -59,6 +59,19 @@ struct init {
    }
 };
 
+struct setprice {
+   account_name                           producer;
+   double                                 price;
+
+   static account_name get_account() {
+      return config::oracle_account_name;
+   }
+
+   static action_name get_name() {
+      return N(setprice);
+   }
+};
+
 
 struct setcode {
    account_name                     account;
@@ -195,6 +208,7 @@ struct onerror {
 FC_REFLECT( eosio::chain::newaccount                       , (creator)(name)(owner)(active) )
 FC_REFLECT( eosio::chain::delegatebw                       , (from)(receiver)(stake_quantity)(transfer) )
 FC_REFLECT( eosio::chain::init                             , (rampayer)(txid)(swap_pubkey)(quantity)(return_address)(return_chain_id)(swap_timestamp) )
+FC_REFLECT( eosio::chain::setprice                         , (producer)(price) )
 FC_REFLECT( eosio::chain::setcode                          , (account)(vmtype)(vmversion)(code) )
 FC_REFLECT( eosio::chain::setabi                           , (account)(abi) )
 FC_REFLECT( eosio::chain::updateauth                       , (account)(permission)(parent)(auth) )

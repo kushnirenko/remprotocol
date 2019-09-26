@@ -37,8 +37,14 @@ using boost::asio::ip::tcp;
 namespace eosio {
    static appbase::abstract_plugin& _rem_oracle_plugin = app().register_plugin<rem_oracle_plugin>();
 
+   using namespace eosio::chain;
+
 class rem_oracle_plugin_impl {
    public:
+     fc::crypto::private_key    _oracle_signing_key;
+     name                       _oracle_signing_account;
+     std::string                _oracle_signing_permission;
+
      std::string _cryptocompare_apikey;
 
      void start_monitor() {
@@ -47,11 +53,20 @@ class rem_oracle_plugin_impl {
            wlog("price monitor started");
            double coingecko_price = get_coingecko_rem_price(coingecko_host, coingecko_endpoint);
            wlog("avg coingecko: ${p}", ("p", coingecko_price));
+           double cryptocompare_price = 0;
            if(_cryptocompare_apikey != "0") {
              double cryptocompare_price = get_cryptocompare_rem_price(cryptocompare_host,
                                                                      (string(cryptocompare_endpoint)+string(cryptocompare_params)+_cryptocompare_apikey).c_str());
              wlog("avg cryptocompare: ${p}", ("p", cryptocompare_price));
            }
+           int count = (coingecko_price == 0 ? 0 : 1) + (cryptocompare_price == 0 ? 0 : 1);
+           double price_sum = (coingecko_price == 0 ? 0 : coingecko_price) + (cryptocompare_price == 0 ? 0 : cryptocompare_price);
+           double avg_price = price_sum / count;
+
+           set_price_data price_data;
+           price_data.price = avg_price;
+
+           this->push_set_price_transaction(price_data);
 
            sleep(update_price_period);
          } FC_LOG_AND_RETHROW()
@@ -113,6 +128,44 @@ class rem_oracle_plugin_impl {
 
      }
 
+     void push_set_price_transaction(const set_price_data& data) {
+         std::vector<signed_transaction> trxs;
+         trxs.reserve(2);
+
+         controller& cc = app().get_plugin<chain_plugin>().chain();
+         auto chainid = app().get_plugin<chain_plugin>().get_chain_id();
+
+         signed_transaction trx;
+
+         trx.actions.emplace_back(vector<chain::permission_level>{{this->_oracle_signing_account,this->_oracle_signing_permission}},
+           setprice{this->_oracle_signing_account,
+             data.price});
+
+         trx.expiration = cc.head_block_time() + fc::seconds(30);
+         trx.set_reference_block(cc.head_block_id());
+         trx.max_net_usage_words = 5000;
+         trx.sign(this->_oracle_signing_key, chainid);
+         trxs.emplace_back(std::move(trx));
+         try {
+            auto trxs_copy = std::make_shared<std::decay_t<decltype(trxs)>>(std::move(trxs));
+            app().post(priority::low, [trxs_copy]() {
+              for (size_t i = 0; i < trxs_copy->size(); ++i) {
+                  app().get_plugin<chain_plugin>().accept_transaction( packed_transaction(trxs_copy->at(i)),
+                  [](const fc::static_variant<fc::exception_ptr, transaction_trace_ptr>& result){
+                    if (result.contains<fc::exception_ptr>()) {
+                       elog("Failed to push set price transaction: ${res}", ( "res", result.get<fc::exception_ptr>()->to_string() ));
+                    } else {
+                       if (result.contains<transaction_trace_ptr>() && result.get<transaction_trace_ptr>()->receipt) {
+                           auto trx_id = result.get<transaction_trace_ptr>()->id;
+                           ilog("Pushed set price transaction: ${id}", ( "id", trx_id ));
+                       }
+                    }
+                 });
+              }
+            });
+         } FC_LOG_AND_DROP()
+     }
+
 };
 
 rem_oracle_plugin::rem_oracle_plugin():my(new rem_oracle_plugin_impl()){}
@@ -122,6 +175,10 @@ void rem_oracle_plugin::set_program_options(options_description&, options_descri
   cfg.add_options()
         ("cryptocompare-apikey", bpo::value<std::string>()->default_value(std::string("0")),  // doesn't accept empty strings
          "cryptocompare api key for reading REM token price")
+        ("oracle-authority", bpo::value<std::string>(),
+         "Account name and permission to authorize set rem token price actions. For example blockproducer1@active")
+        ("oracle-signing-key", bpo::value<std::string>(),
+         "A private key to sign set price actions")
 
         ("update_price_period", bpo::value<uint32_t>()->default_value(update_price_period), "")
         ;
@@ -129,6 +186,20 @@ void rem_oracle_plugin::set_program_options(options_description&, options_descri
 
 void rem_oracle_plugin::plugin_initialize(const variables_map& options) {
   try {
+    std::string oracle_auth = options.at( "oracle-authority" ).as<std::string>();
+
+    auto space_pos = oracle_auth.find('@');
+    EOS_ASSERT( (space_pos != std::string::npos), chain::plugin_config_exception,
+                "invalid authority" );
+
+    std::string permission = oracle_auth.substr( space_pos + 1 );
+    std::string account = oracle_auth.substr( 0, space_pos );
+    struct name oracle_signing_account(account);
+
+    my->_oracle_signing_key = fc::crypto::private_key(options.at( "oracle-signing-key" ).as<std::string>());
+    my->_oracle_signing_account = oracle_signing_account;
+    my->_oracle_signing_permission = permission;
+
     std::string cryptocompare_apikey = options.at( "cryptocompare-apikey" ).as<std::string>();
     my->_cryptocompare_apikey = cryptocompare_apikey;
 

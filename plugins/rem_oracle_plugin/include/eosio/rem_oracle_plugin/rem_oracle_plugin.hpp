@@ -18,6 +18,10 @@ const char* cryptocompare_params = "?fsym=REM&tsyms=USD&apikey=";
 
 uint32_t update_price_period = 5;  // seconds
 
+struct set_price_data {
+    double price;
+};
+
 /**
  *  This is a template plugin, intended to serve as a starting point for making new plugins
  */
