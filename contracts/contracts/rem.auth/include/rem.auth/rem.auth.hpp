@@ -33,6 +33,21 @@ namespace eosio {
       auth(name receiver, name code,  datastream<const char*> ds);
 
       /**
+       * Buy auth token.
+       *
+       * @details Allows `from` account to transfer to `to` account the `quantity` tokens.
+       * One account is debited and the other is credited with quantity tokens.
+       *
+       * @param from - the account to transfer from,
+       * @param to - the account to be transferred to,
+       * @param quantity - the quantity of tokens to be transferred,
+       * @param key - the public key which is tied to the corresponding account,
+       * @param signed_by_key - the signature that sign payload by key,
+       */
+      [[eosio::action]]
+      void buyauth(const name &account, const asset &quantity, const double max_price);
+
+      /**
        * Add new authentication key action.
        *
        * @details Add new authentication key by user account.
@@ -86,7 +101,9 @@ namespace eosio {
        * @param sign_by_key - the signature that sign payload by key.
        */
       [[eosio::action]]
-      void revokeapp(const name &account, const string &key_str, const signature &signed_by_key);
+      void revokeapp(const name &account, const string &revoke_key_str,
+                     const string &key_str, const signature &signed_by_key);
+
       /**
        * Transfer action.
        *
@@ -125,6 +142,7 @@ namespace eosio {
 
    private:
       static constexpr symbol core_symbol{"REM", 4};
+      static constexpr symbol auth_symbol{"AUTH", 4};
       static constexpr name system_account = "rem"_n;
       static constexpr name system_token_account = "rem.token"_n;
       const time_point key_lifetime = time_point(seconds(31104000)); // 360 days
@@ -164,6 +182,10 @@ namespace eosio {
       void _addkey(const name& account, const public_key& device_key, const string& extra_key, const name& payer);
       void _revoke(const name &account, const public_key &key);
 
+      void issue_tokens(const asset &quantity);
+      void retire_tokens(const asset &quantity, const string &memo);
+      void transfer_tokens(const name &from, const name &to, const asset &quantity, const string &memo);
+
       auto get_authkey_it(const name &account, const public_key &key);
       void require_app_auth(const name &account, const public_key &key);
 
@@ -171,6 +193,7 @@ namespace eosio {
       void to_rewards(const name& payer, const asset &quantity);
 
       string join(vector <string> &&vec, string delim = string("*"));
+      uint64_t pow(uint64_t num, uint8_t& exp);
       checksum256 sha256(const string &str) {
          return eosio::sha256(str.c_str(), str.size());
       }

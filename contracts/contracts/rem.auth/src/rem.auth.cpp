@@ -19,6 +19,25 @@ namespace eosio {
        prods_reward = p_reward_table.get();
     };
 
+   void auth::buyauth(const name &account, const asset &quantity, const double max_price) {
+      require_auth(permission_level{account, "active"_n});
+      check(quantity.is_valid(), "invalid quantity");
+      check(quantity.amount > 1, "quantity should be a positive value");
+      check(quantity.symbol == auth_symbol, "symbol precision mismatch");
+
+//      double remusd = get_remusd_price();
+      double remusd = 0.003019;
+      check(max_price > remusd, "currently rem-usd price is above maximum price");
+
+      double rem_amount = quantity.amount / (remusd);
+      asset rem_quantity{static_cast<int64_t>(rem_amount), core_symbol};
+      token::transfer_action transfer_act{ system_token_account, permission_level{account, "active"_n} };
+      transfer_act.send( account, _self, rem_quantity, "" );
+//      transfer_tokens(account, _self, rem_quantity, string("buy AUTH token"));
+//      issue_tokens(quantity);
+//      transfer_tokens(_self, account, quantity, string("buy AUTH token"));
+   }
+
    void auth::addkeyacc(const name &account, const string &key_str, const signature &signed_by_key,
                         const string &extra_key, const string &payer_str) {
 
@@ -57,7 +76,10 @@ namespace eosio {
                         const string &extra_key, const string &key_str, const signature &signed_by_key,
                         const string &payer_str) {
 
-      name payer = payer_str.empty() ? account : name(payer_str);
+      bool is_payer = payer_str.empty();
+      name payer = is_payer ? account : name(payer_str);
+      if (!is_payer) { require_auth(payer); }
+
       checksum256 digest = sha256(join( { account.to_string(), new_key_str, extra_key, key_str, payer_str } ));
 
       public_key new_key = string_to_public_key(new_key_str);
@@ -72,15 +94,22 @@ namespace eosio {
    void auth::revokeacc(const name &account, const string &key_str) {
       require_auth(account);
       public_key key = string_to_public_key(key_str);
+
       _revoke(account, key);
    }
 
-   void auth::revokeapp(const name &account, const string &key_str, const signature &signed_by_key) {
+   void auth::revokeapp(const name &account, const string &revoke_key_str,
+                        const string &key_str, const signature &signed_by_key) {
+      public_key revoke_key = string_to_public_key(revoke_key_str);
       public_key key = string_to_public_key(key_str);
-      checksum256 digest = sha256(join( { account.to_string(), key_str } ));
-      check(assert_recover_key(digest, signed_by_key, key), "expected key different than recovered user key");
 
-      _revoke(account, key);
+      checksum256 digest = sha256(join( { account.to_string(), revoke_key_str, key_str } ));
+
+      public_key expected_key = recover_key(digest, signed_by_key);
+      check(expected_key == key, "expected key different than recovered user key");
+      require_app_auth(account, key);
+
+      _revoke(account, revoke_key);
    }
 
    void auth::_revoke(const name &account, const public_key &key) {
@@ -103,8 +132,7 @@ namespace eosio {
       require_app_auth(from, key);
       check(assert_recover_key(digest, signed_by_key, key), "expected key different than recovered user key");
 
-      token::transfer_action transfer(system_token_account, {from, "active"_n});
-      transfer.send(from, to, quantity, string("authentication app transfer"));
+      transfer_tokens(from, to, quantity, string("authentication app transfer"));
    }
 
    void auth::setbpreward(const asset &quantity) {
@@ -130,6 +158,10 @@ namespace eosio {
       to_rewards(payer, prods_reward.quantity);
    }
 
+   uint64_t auth::pow(uint64_t num, uint8_t& exp) {
+      return exp <= 1 ? num : pow(num*num, --exp);
+   }
+
    void auth::require_app_auth(const name &account, const public_key &key) {
       auto authkeys_idx = authkeys_tbl.get_index<"byname"_n>();
       auto it = authkeys_idx.find(account.value);
@@ -138,6 +170,16 @@ namespace eosio {
 
       it = get_authkey_it(account, key);
       check(it != authkeys_idx.end(), "account has no active app keys");
+   }
+
+   void auth::issue_tokens(const asset &quantity) {
+      token::issue_action issue(_self, {_self, "active"_n});
+      issue.send(_self, quantity, string("buy auth tokens"));
+   }
+
+   void auth::transfer_tokens(const name &from, const name &to, const asset &quantity, const string &memo) {
+      token::transfer_action transfer(system_token_account, {from, "active"_n});
+      transfer.send(from, to, quantity, memo);
    }
 
    void auth::to_rewards(const name &payer, const asset &quantity) {
@@ -165,4 +207,4 @@ namespace eosio {
    }
 } /// namespace eosio
 
-EOSIO_DISPATCH( eosio::auth, (addkeyacc)(addkeyapp)(revokeacc)(revokeapp)(transfer)(setbpreward)(cleartable) )
+EOSIO_DISPATCH( eosio::auth, (addkeyacc)(addkeyapp)(revokeacc)(revokeapp)(buyauth)(transfer)(setbpreward)(cleartable) )
