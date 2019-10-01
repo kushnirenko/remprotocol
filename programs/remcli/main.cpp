@@ -120,6 +120,7 @@ Options:
 
 #include <fc/io/fstream.hpp>
 
+#include "attribute_helpers.hpp"
 #include "CLI11.hpp"
 #include "help_text.hpp"
 #include "localize.hpp"
@@ -2378,6 +2379,92 @@ int main( int argc, char** argv ) {
    // get info
    get->add_subcommand("info", localized("Get current blockchain information"))->set_callback([] {
       std::cout << fc::json::to_pretty_string(get_info()) << std::endl;
+   });
+
+   string getAttrIssuer;
+   string getAttrReceiver;
+   string getAttrName;
+   auto getAttribute = get->add_subcommand("attribute", localized("Retrieve attribute information"), false);
+   getAttribute->add_option("issuer", getAttrIssuer, localized("The name of the account that issued attribute"))->required();
+   getAttribute->add_option("receiver", getAttrReceiver, localized("The name of the account attribute was issued for"))->required();
+   getAttribute->add_option("attribute_name", getAttrName, localized("The name of the attribute"))->required();
+   getAttribute->set_callback([&] {
+      auto result = call(get_table_func, fc::mutable_variant_object("json", true)
+         ("code", "rem.attr")
+         ("scope", "rem.attr")
+         ("table", "attrinfo")
+         ("lower_bound", name(getAttrName).value)
+         ("upper_bound", name(getAttrName).value + 1)
+         ("limit", 1)
+      );
+      auto res = result.as<eosio::chain_apis::read_only::get_table_rows_result>();
+      if( res.rows.empty() || res.rows[0].get_object()["attribute_name"].as_string() != getAttrName ) {
+         std::cerr << "Attribute info not found for " << getAttrName << std::endl;
+         return;
+      }
+      EOS_ASSERT( 1 == res.rows.size(), misc_exception, "More than one attribute_info" );
+      const auto attr_type = res.rows[0].get_object()["type"].as_int64();
+
+      eosio::uint128_t index_key = name(getAttrReceiver).value;
+      index_key <<= 64;
+      index_key |= name(getAttrIssuer).value;
+      result = call(get_table_func, fc::mutable_variant_object("json", true)
+         ("code", "rem.attr")
+         ("scope", getAttrName)
+         ("table", "attributes")
+         ("index_position", "2")
+         ("key_type", "i128")
+         ("lower_bound", index_key)
+         ("upper_bound", index_key + 1)
+         ("limit", 1)
+      );
+      res = result.as<eosio::chain_apis::read_only::get_table_rows_result>();
+      if( res.rows.empty() ) {
+         std::cerr << "Attribute " << getAttrName << " not found for " << getAttrReceiver << " issued by " << getAttrIssuer << std::endl;
+         return;
+      }
+      EOS_ASSERT( 1 == res.rows.size(), misc_exception, "More than one attribute" );
+      const auto attr_string = res.rows[0].get_object()["attribute"]["data"].as_string();
+      std::string decodedAttribute;
+      switch (attr_type)
+      {
+         case 0:
+            decodedAttribute = decodeAttribute<bool>(attr_string);
+            break;
+         case 1:
+            decodedAttribute = decodeAttribute<int32_t>(attr_string);
+            break;
+         case 2:
+            decodedAttribute = decodeAttribute<int64_t>(attr_string);
+            break;
+         case 3:
+            //TODO: check if we need to use chain_id_type instead of fc::sha256
+            decodedAttribute = decodeAttribute<std::pair<fc::sha256, name>>(attr_string);
+            break;
+         case 4:
+            decodedAttribute = decodeAttribute<std::string>(attr_string);
+            break;
+         case 5:
+            decodedAttribute = decodeAttribute<std::string>(attr_string);
+            break;
+         case 6:
+            decodedAttribute = decodeAttribute<std::string>(attr_string);
+            break;
+         case 7:
+            decodedAttribute = decodeAttribute<std::string>(attr_string);
+            break;
+         case 8:
+            decodedAttribute = decodeAttribute<std::vector<char>>(attr_string);
+            break;
+         case 9:
+            decodedAttribute = decodeAttribute<std::set<std::pair<name, std::string>>>(attr_string);
+            break;
+         default:
+            //TODO: change exception
+            EOS_ASSERT( false, chain_type_exception, "Unknown attribute type" );
+      }
+      std::cout << localized("Attribute:\n  Name: ${name}\n  Issuer: ${issuer}\n  Receiver: ${receiver}\n  Value:\n${value}",
+         ("name", getAttrName)("issuer", getAttrIssuer)("receiver", getAttrReceiver)("value", decodedAttribute)) << std::endl;
    });
 
    // get block
