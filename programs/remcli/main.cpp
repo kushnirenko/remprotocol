@@ -2414,6 +2414,7 @@ int main( int argc, char** argv ) {
          std::cerr << "Attribute info not found for " << getAttrName << std::endl;
          return;
       }
+      //TODO: change exception type
       EOS_ASSERT( 1 == res.rows.size(), misc_exception, "More than one attribute_info" );
       const auto attr_type = res.rows[0].get_object()["type"].as_int64();
 
@@ -2437,9 +2438,11 @@ int main( int argc, char** argv ) {
       }
       EOS_ASSERT( 1 == res.rows.size(), misc_exception, "More than one attribute" );
       const auto attr_string = res.rows[0].get_object()["attribute"]["data"].as_string();
-      std::string decodedAttribute = decodeAttribute(attr_string, attr_type);
-      std::cout << localized("Attribute:\n  Name: ${name}\n  Issuer: ${issuer}\n  Receiver: ${receiver}\n  Value:\n${value}",
-         ("name", getAttrName)("issuer", getAttrIssuer)("receiver", getAttrReceiver)("value", decodedAttribute)) << std::endl;
+      auto decoded_attribute = decodeAttribute(attr_string, attr_type);
+      const auto pending_attr_string = res.rows[0].get_object()["attribute"]["pending"].as_string();
+      auto decoded_pending_ttribute = decodeAttribute(pending_attr_string, attr_type);
+      std::cout << localized("Attribute:\n  Name: ${name}\n  Issuer: ${issuer}\n  Receiver: ${receiver}\n  Value:\n${value}\n  Pending value:\n${pending}",
+         ("name", getAttrName)("issuer", getAttrIssuer)("receiver", getAttrReceiver)("value", decoded_attribute)("pending", decoded_pending_ttribute)) << std::endl;
    });
 
    // get block
@@ -2877,6 +2880,7 @@ int main( int argc, char** argv ) {
       EOS_ASSERT( 1 == res.rows.size(), misc_exception, "More than one attribute_info" );
       const auto attr_type = res.rows[0].get_object()["type"].as_int64();
 
+      std::cerr << localized("Setting attribute...") << std::endl;
       const auto bytes = encodeAttribute(attrValue, attr_type);
       send_actions({ create_setattr(setAttrIssuer, setAttrReceiver, setAttrName, bytes) });
    });
