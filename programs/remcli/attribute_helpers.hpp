@@ -10,6 +10,10 @@
 
 std::string decodeAttribute(const std::string& hex, int32_t type)
 {
+   if (hex.empty()) {
+      return "";
+   }
+
    std::vector<char> data(hex.size() / 2);
    fc::from_hex(hex, data.data(), data.size());
    fc::variant v;
