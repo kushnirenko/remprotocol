@@ -6,10 +6,10 @@
 
 #include <eosio/asset.hpp>
 #include <eosio/crypto.hpp>
-#include <eosio/singleton.hpp>
 #include <eosio/eosio.hpp>
-#include <eosio/transaction.hpp>
 #include <eosio/permission.hpp>
+#include <eosio/singleton.hpp>
+#include <eosio/transaction.hpp>
 
 #include <numeric>
 
@@ -24,7 +24,8 @@ namespace eosio {
     *
     * rem.auth contract
     *
-    * @details rem.auth contract defines the structures and actions that allow users and contracts to store public keys.
+    * @details rem.auth contract defines the structures and actions that allow users and contracts to add, store, revoke
+    * public keys.
     * @{
     */
    class [[eosio::contract("rem.auth")]] auth : public contract {
@@ -33,34 +34,20 @@ namespace eosio {
       auth(name receiver, name code,  datastream<const char*> ds);
 
       /**
-       * Buy auth token.
-       *
-       * @details Allows `from` account to transfer to `to` account the `quantity` tokens.
-       * One account is debited and the other is credited with quantity tokens.
-       *
-       * @param from - the account to transfer from,
-       * @param to - the account to be transferred to,
-       * @param quantity - the quantity of tokens to be transferred,
-       * @param key - the public key which is tied to the corresponding account,
-       * @param signed_by_key - the signature that sign payload by key,
-       */
-      [[eosio::action]]
-      void buyauth(const name &account, const asset &quantity, const double max_price);
-
-      /**
        * Add new authentication key action.
        *
        * @details Add new authentication key by user account.
        *
        * @param account - the owner account to execute the addkeyacc action for,
-       * @param key - the public key that signed the payload,
-       * @param signed_by_key - the signature that sign payload by key,
+       * @param key_str - the public key that signed the payload,
+       * @param signed_by_key - the signature that was signed by key_str,
+       * @param price_limit - the maximum price which will be charged for storing the key can be in REM and AUTH,
        * @param extra_key - the public key for authorization in external services,
        * @param payer_str - the account from which resources are debited.
        */
       [[eosio::action]]
       void addkeyacc(const name &account, const string &key_str, const signature &signed_by_key,
-                     const string &extra_key, const string &payer_str);
+                     const string &extra_key, const asset &price_limit,const string &payer_str);
 
       /**
        * Add new authentication key action.
@@ -68,41 +55,56 @@ namespace eosio {
        * @details Add new authentication key by using correspond to account authentication key.
        *
        * @param account - the owner account to execute the addkeyacc action for,
-       * @param new_key - the public key that will be added,
-       * @param signed_by_new_key - the signature that sign payload by new_key,
+       * @param new_key_str - the public key that will be added,
+       * @param signed_by_new_key - the signature that was signed by new_key_str,
        * @param extra_key - the public key for authorization in external services,
-       * @param key - the public key which is tied to the corresponding account,
-       * @param sign_by_key - the signature that sign payload by key,
+       * @param key_str - the public key which is tied to the corresponding account,
+       * @param sign_by_key - the signature that was signed by key_str,
+       * @param price_limit - the maximum price which will be charged for storing the key can be in REM and AUTH,
        * @param payer_str - the account from which resources are debited.
        */
       [[eosio::action]]
       void addkeyapp(const name &account, const string &new_key_str, const signature &signed_by_new_key,
                      const string &extra_key, const string &key_str, const signature &signed_by_key,
-                     const string &payer_str);
+                     const asset &price_limit, const string &payer_str);
 
       /**
-       * Revoke active key.
+       * Revoke active authentication key action.
        *
-       * @details Revoke already added active key by user account.
+       * @details Revoke already added active authentication key by user account.
        *
        * @param account - the owner account to execute the revokeacc action for,
-       * @param key - the public key which is tied to the corresponding account.
+       * @param key_str - the public key which is tied to the corresponding account.
        */
       [[eosio::action]]
       void revokeacc(const name &account, const string &key_str);
 
       /**
-       * Revoke active key.
+       * Revoke active authentication key action.
        *
-       * @details Revoke already added active key by using correspond to account authentication key.
+       * @details Revoke already added active authentication key by using correspond to account authentication key.
        *
        * @param account - the owner account to execute the revokeacc action for,
-       * @param key - the public key which is tied to the corresponding account,
-       * @param sign_by_key - the signature that sign payload by key.
+       * @param revoke_key_str - the public key to be revoked on the corresponding account,
+       * @param key_str - the public key which is tied to the corresponding account,
+       * @param signed_by_key - the signature that sign payload by key_str.
        */
       [[eosio::action]]
       void revokeapp(const name &account, const string &revoke_key_str,
                      const string &key_str, const signature &signed_by_key);
+
+      /**
+       * Buy AUTH credits action.
+       *
+       * @details buy AUTH credit at a current REM-USD price in rem.orace.
+       *
+       * @param account - the account to transfer from,
+       * @param quantity - the quantity of AUTH credits to be purchased,
+       * @param max_price - the maximum price for one AUTH credit.
+       * Amount of REM tokens that can be debited for one AUTH credit.
+       */
+      [[eosio::action]]
+      void buyauth(const name &account, const asset &quantity, const double max_price);
 
       /**
        * Transfer action.
@@ -113,23 +115,12 @@ namespace eosio {
        * @param from - the account to transfer from,
        * @param to - the account to be transferred to,
        * @param quantity - the quantity of tokens to be transferred,
-       * @param key - the public key which is tied to the corresponding account,
-       * @param signed_by_key - the signature that sign payload by key,
+       * @param key_str - the public key which is tied to the corresponding account,
+       * @param signed_by_key - the signature that was signed by key_str,
        */
       [[eosio::action]]
       void transfer(const name &from, const name &to, const asset &quantity,
                     const string &key_str, const signature &signed_by_key);
-
-      /**
-       * Set block producers reward.
-       *
-       * @details Change amount of block producers reward, action permitted only for producers.
-       *
-       * @param quantity - the quantity of tokens to be rewarded.
-       */
-      [[eosio::action]]
-      void setbpreward(const asset &quantity);
-
 
       [[eosio::action]]
       void cleartable( );
@@ -141,10 +132,12 @@ namespace eosio {
       using transfer_action = action_wrapper<"transfer"_n, &auth::transfer>;
 
    private:
-      static constexpr symbol core_symbol{"REM", 4};
       static constexpr symbol auth_symbol{"AUTH", 4};
+      const asset key_store_price{10000, auth_symbol};
+
       static constexpr name system_account = "rem"_n;
       static constexpr name system_token_account = "rem.token"_n;
+
       const time_point key_lifetime = time_point(seconds(31104000)); // 360 days
 
       struct [[eosio::table]] authkeys {
@@ -162,31 +155,31 @@ namespace eosio {
          EOSLIB_SERIALIZE( authkeys, (N)(owner)(key)(extra_key)(not_valid_before)(not_valid_after)(revoked_at))
       };
 
-      struct [[eosio::table]] prodsreward {
-         asset quantity{100000, core_symbol};
-
-         // explicit serialization macro is not necessary, used here only to improve compilation time
-         EOSLIB_SERIALIZE( prodsreward, (quantity))
-      };
-
       typedef multi_index<"authkeys"_n, authkeys,
                           indexed_by<"byname"_n, const_mem_fun < authkeys, uint64_t, &authkeys::by_name>>
                           > authkeys_inx;
 
-      typedef singleton<"prodsreward"_n, prodsreward> p_reward;
+      struct [[eosio::table]] account {
+         asset    balance;
+
+         uint64_t primary_key()const { return balance.symbol.code().raw(); }
+      };
+
+      typedef multi_index<"accounts"_n, account> accounts;
 
       authkeys_inx authkeys_tbl;
-      p_reward p_reward_table;
-      prodsreward prods_reward;
 
-      void _addkey(const name& account, const public_key& device_key, const string& extra_key, const name& payer);
+      void _addkey(const name& account, const public_key& device_key, const string& extra_key,
+                   const asset &price_limit, const name& payer);
       void _revoke(const name &account, const public_key &key);
 
       void issue_tokens(const asset &quantity);
-      void retire_tokens(const asset &quantity, const string &memo);
+      void retire_tokens(const asset &quantity);
       void transfer_tokens(const name &from, const name &to, const asset &quantity, const string &memo);
 
       auto get_authkey_it(const name &account, const public_key &key);
+      asset get_balance( const name& token_contract_account, const name& owner, const symbol& sym );
+      asset get_authrem_price(const asset &quantity);
       void require_app_auth(const name &account, const public_key &key);
 
       bool assert_recover_key(const checksum256 &digest, const signature &sign, const public_key &key);

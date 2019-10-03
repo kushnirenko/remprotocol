@@ -33,6 +33,13 @@ struct rem_genesis_account {
    uint64_t     initial_balance;
 };
 
+const char *AUTH_SYMBOL_NAME = "AUTH";
+symbol AUTH_SYMBOL(0U, AUTH_SYMBOL_NAME);
+
+eosio::chain::asset auth_from_string(const std::string& s) {
+   return eosio::chain::asset::from_string(s + " " + AUTH_SYMBOL_NAME);
+}
+
 class rem_auth_tester : public TESTER {
 public:
    rem_auth_tester();
@@ -159,6 +166,16 @@ public:
       return r;
    }
 
+   auto buyauth(const name &account, const asset &quantity, const double &max_price, const vector<permission_level>& auths) {
+      auto r = base_tester::push_action(N(rem.auth), N(buyauth), auths, mvo()
+         ("account",  account)
+         ("quantity", quantity )
+         ("max_price", max_price )
+      );
+      produce_block();
+      return r;
+   }
+
    auto register_producer(name producer) {
       auto r = base_tester::push_action(config::system_account_name, N(regproducer), producer, mvo()
          ("producer",  name(producer))
@@ -201,6 +218,10 @@ public:
 
    asset get_balance( const account_name& act ) {
       return get_currency_balance(N(rem.token), symbol(CORE_SYMBOL), act);
+   }
+
+   asset get_balance_auth( const account_name& act ) {
+      return get_currency_balance(N(rem.token), AUTH_SYMBOL, act);
    }
 
    void set_code_abi(const account_name& account, const vector<uint8_t>& wasm, const char* abi, const private_key_type* signer = nullptr) {
@@ -265,15 +286,17 @@ rem_auth_tester::rem_auth_tester() {
    BOOST_TEST(rem_auth_acc.is_privileged() == true);
 
    // Create SYS tokens in rem.token, set its manager as rem
-   const auto max_supply     = core_from_string("1000000000.0000"); /// 10x larger than 1B initial tokens
-   const auto initial_supply = core_from_string("100000000.0000");  /// 10x larger than 1B initial tokens
+   const auto max_supply_core     = core_from_string("1000000000.0000"); /// 10x larger than 1B initial tokens
+   const auto max_supply_auth     = auth_from_string("100000000000"); /// 10x larger than 1B initial tokens
+   const auto initial_supply_core = core_from_string("100000000.0000");  /// 10x larger than 1B initial tokens
 
-   create_currency(N(rem.token), config::system_account_name, max_supply);
+   create_currency(N(rem.token), config::system_account_name, max_supply_core);
+   create_currency(N(rem.token), N(rem.auth), max_supply_auth);
    // Issue the genesis supply of 1 billion SYS tokens to rem.system
-   issue(N(rem.token), config::system_account_name, config::system_account_name, initial_supply);
+   issue(N(rem.token), config::system_account_name, config::system_account_name, initial_supply_core);
 
    auto actual = get_balance(config::system_account_name);
-   BOOST_REQUIRE_EQUAL(initial_supply, actual);
+   BOOST_REQUIRE_EQUAL(initial_supply_core, actual);
 
    std::vector<rem_genesis_account> genesis_test( {
      {N(b1),        100'000'000'0000ll},
@@ -880,6 +903,20 @@ BOOST_FIXTURE_TEST_CASE( revoke_require_app_auth_test, rem_auth_tester ) {
          addkeyapp(account, new_key_pub, signed_by_new_key_app, extra_key,
                    key_pub, signed_by_key_app, payer_str, auths_level),
                    eosio_assert_message_exception);
+   } FC_LOG_AND_RETHROW()
+}
+
+BOOST_FIXTURE_TEST_CASE( buyauth_tests, rem_auth_tester ) {
+   try {
+      vector<permission_level> auths_level = { permission_level{N(prodb), config::active_name} };
+      transfer(config::system_account_name, N(prodb), core_from_string("500.0000"), "initial transfer");
+
+      buyauth(N(prodb), asset::from_string("1 AUTH"), 1, auths_level);
+
+      BOOST_TEST_MESSAGE(get_balance(N(prodb)));
+      BOOST_TEST_MESSAGE(get_balance(N(rem.auth)));
+      BOOST_TEST_MESSAGE(get_balance_auth(N(rem.auth)));
+      BOOST_TEST_MESSAGE(get_balance_auth(N(prodb)));
    } FC_LOG_AND_RETHROW()
 }
 

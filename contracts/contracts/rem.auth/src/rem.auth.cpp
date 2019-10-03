@@ -8,48 +8,48 @@
 #include <rem.token/rem.token.hpp>
 
 namespace eosio {
+
+   using eosiosystem::system_contract;
+
    auth::auth(name receiver, name code,  datastream<const char*> ds)
    :contract(receiver, code, ds),
-    authkeys_tbl(_self, _self.value),
-    p_reward_table(_self, _self.value)
-    {
-       if ( !p_reward_table.exists() ) {
-          p_reward_table.set(prodsreward{}, _self);
-       }
-       prods_reward = p_reward_table.get();
-    };
+    authkeys_tbl(_self, _self.value) {};
 
    void auth::buyauth(const name &account, const asset &quantity, const double max_price) {
-      require_auth(permission_level{account, "active"_n});
+      require_auth(account);
       check(quantity.is_valid(), "invalid quantity");
-      check(quantity.amount > 1, "quantity should be a positive value");
+      check(quantity.amount > 0, "quantity should be a positive value");
       check(quantity.symbol == auth_symbol, "symbol precision mismatch");
 
-//      double remusd = get_remusd_price();
-      double remusd = 0.003019;
-      check(max_price > remusd, "currently rem-usd price is above maximum price");
+//      double remusd = get_remusd_price(); // TODO: implement method get_remusd_price from oracle table remusd
+      double remusd = 0.002819;
 
-      double rem_amount = quantity.amount / (remusd);
-      asset rem_quantity{static_cast<int64_t>(rem_amount), core_symbol};
-      token::transfer_action transfer_act{ system_token_account, permission_level{account, "active"_n} };
-      transfer_act.send( account, _self, rem_quantity, "" );
-//      transfer_tokens(account, _self, rem_quantity, string("buy AUTH token"));
-//      issue_tokens(quantity);
-//      transfer_tokens(_self, account, quantity, string("buy AUTH token"));
+      check(max_price > remusd, "currently rem-usd price is above maximum price");
+      asset purchase_fee = get_authrem_price(quantity);
+
+      transfer_tokens(account, _self, purchase_fee, "purchase fee AUTH tokens");
+      issue_tokens(quantity);
+      transfer_tokens(_self, account, quantity, "buying an auth token");
    }
 
    void auth::addkeyacc(const name &account, const string &key_str, const signature &signed_by_key,
-                        const string &extra_key, const string &payer_str) {
+                        const string &extra_key, const asset &price_limit, const string &payer_str) {
 
       name payer = payer_str.empty() ? account : name(payer_str);
       require_auth(account);
       require_auth(payer);
 
+      bool is_pay_by_auth = price_limit.symbol == auth_symbol;
+      bool is_pay_by_rem = price_limit.symbol == system_contract::get_core_symbol();
+      check(is_pay_by_rem || is_pay_by_auth, "unavailable payment method");
+      check(price_limit.is_valid(), "invalid price limit");
+      check(price_limit.amount > 0, "price limit should be a positive value");
+
       public_key key = string_to_public_key(key_str);
       checksum256 digest = sha256(join( { account.to_string(), key_str, extra_key, payer_str } ));
       eosio::assert_recover_key(digest, signed_by_key, key);
 
-      _addkey(account, key, extra_key, payer);
+      _addkey(account, key, extra_key, price_limit, payer);
    }
 
    auto auth::get_authkey_it(const name &account, const public_key &key) {
@@ -74,7 +74,7 @@ namespace eosio {
 
    void auth::addkeyapp(const name &account, const string &new_key_str, const signature &signed_by_new_key,
                         const string &extra_key, const string &key_str, const signature &signed_by_key,
-                        const string &payer_str) {
+                        const asset &price_limit, const string &payer_str) {
 
       bool is_payer = payer_str.empty();
       name payer = is_payer ? account : name(payer_str);
@@ -84,11 +84,12 @@ namespace eosio {
 
       public_key new_key = string_to_public_key(new_key_str);
       public_key key = string_to_public_key(key_str);
+
       check(assert_recover_key(digest, signed_by_new_key, new_key), "expected key different than recovered new key");
       check(assert_recover_key(digest, signed_by_key, key), "expected key different than recovered user key");
       require_app_auth(account, key);
 
-      _addkey(account, new_key, extra_key, payer);
+      _addkey(account, key, extra_key, price_limit, payer);
    }
 
    void auth::revokeacc(const name &account, const string &key_str) {
@@ -112,17 +113,6 @@ namespace eosio {
       _revoke(account, revoke_key);
    }
 
-   void auth::_revoke(const name &account, const public_key &key) {
-      require_app_auth(account, key);
-
-      auto it = get_authkey_it(account, key);
-
-      time_point ct = current_time_point();
-      authkeys_tbl.modify(*it, _self, [&](auto &r) {
-         r.revoked_at = ct.sec_since_epoch();
-      });
-   }
-
    void auth::transfer(const name &from, const name &to, const asset &quantity,
                        const string &key_str, const signature &signed_by_key) {
 
@@ -135,16 +125,45 @@ namespace eosio {
       transfer_tokens(from, to, quantity, string("authentication app transfer"));
    }
 
-   void auth::setbpreward(const asset &quantity) {
-      require_auth( _self );
-      check(quantity.symbol == core_symbol, "symbol precision mismatch");
-      check(quantity.amount > 0, "amount must be a positive");
-
-      p_reward_table.set(prodsreward{quantity}, _self);
+   void auth::cleartable( ) {
+      require_auth(_self);
+      for (auto _table_itr = authkeys_tbl.begin(); _table_itr != authkeys_tbl.end();) {
+         _table_itr = authkeys_tbl.erase(_table_itr);
+      }
    }
 
    void auth::_addkey(const name& account, const public_key& key,
-                      const string& extra_key, const name& payer) {
+                      const string& extra_key, const asset &price_limit, const name& payer) {
+
+      bool is_pay_by_auth = price_limit.symbol == auth_symbol;
+      bool is_pay_by_rem = price_limit.symbol == system_contract::get_core_symbol();
+      check(is_pay_by_rem || is_pay_by_auth, "unavailable payment method");
+      check(price_limit.is_valid(), "invalid price limit");
+      check(price_limit.amount > 0, "price limit should be a positive value");
+
+      asset account_auth_balance = get_balance(system_contract::token_account, account, auth_symbol);
+      asset auth2rem_price{0, auth_symbol};
+      asset inline_buyauth_unit_price{0, auth_symbol};
+
+      asset auth_credit_supply = token::get_supply(system_contract::token_account, auth_symbol.code());
+      asset rem_balance = token::get_balance(system_contract::token_account, _self,
+                                             system_contract::get_core_symbol().code());
+
+      if (is_pay_by_rem) {
+         auth2rem_price = get_authrem_price(key_store_price);
+         check(auth2rem_price < price_limit, "currently rem-usd price is above price limit");
+         inline_buyauth_unit_price = key_store_price;
+         transfer_tokens(account, _self, auth2rem_price, "purchase fee AUTH tokens");
+      } else {
+         check(auth_credit_supply.amount > 0, "overdrawn balance");
+         transfer_tokens(account, _self, key_store_price, "buying an auth token");
+         retire_tokens(key_store_price);
+      }
+
+      double reward_amount = (rem_balance.amount + auth2rem_price.amount) /
+         double(auth_credit_supply.amount + inline_buyauth_unit_price.amount);
+
+      to_rewards(_self, asset{static_cast<int64_t>(reward_amount * 10000), system_contract::get_core_symbol()});
 
       authkeys_tbl.emplace(_self, [&](auto &k) {
          k.N = authkeys_tbl.available_primary_key();
@@ -155,11 +174,17 @@ namespace eosio {
          k.not_valid_after = current_time_point() + key_lifetime;
          k.revoked_at = 0; // if not revoked == 0
       });
-      to_rewards(payer, prods_reward.quantity);
    }
 
-   uint64_t auth::pow(uint64_t num, uint8_t& exp) {
-      return exp <= 1 ? num : pow(num*num, --exp);
+   void auth::_revoke(const name &account, const public_key &key) {
+      require_app_auth(account, key);
+
+      auto it = get_authkey_it(account, key);
+
+      time_point ct = current_time_point();
+      authkeys_tbl.modify(*it, _self, [&](auto &r) {
+         r.revoked_at = ct.sec_since_epoch();
+      });
    }
 
    void auth::require_app_auth(const name &account, const public_key &key) {
@@ -172,18 +197,36 @@ namespace eosio {
       check(it != authkeys_idx.end(), "account has no active app keys");
    }
 
+   asset auth::get_balance( const name& token_contract_account, const name& owner, const symbol& sym ) {
+      accounts accountstable( token_contract_account, owner.value );
+      const auto it = accountstable.find(sym.code().raw());
+      return it == accountstable.end() ? asset{0, sym} : it->balance;
+   }
+
+   asset auth::get_authrem_price(const asset &quantity) {
+//      double remusd = get_remusd_price();
+      double remusd = 0.002819;
+      double rem_amount = quantity.amount / remusd;
+      return asset{static_cast<int64_t>(rem_amount), system_contract::get_core_symbol()};
+   }
+
    void auth::issue_tokens(const asset &quantity) {
-      token::issue_action issue(_self, {_self, "active"_n});
+      token::issue_action issue(system_contract::token_account, {_self, system_contract::active_permission});
       issue.send(_self, quantity, string("buy auth tokens"));
    }
 
+   void auth::retire_tokens(const asset &quantity) {
+      token::retire_action retire(system_contract::token_account, {_self, system_contract::active_permission});
+      retire.send(quantity, string("store auth key"));
+   }
+
    void auth::transfer_tokens(const name &from, const name &to, const asset &quantity, const string &memo) {
-      token::transfer_action transfer(system_token_account, {from, "active"_n});
+      token::transfer_action transfer(system_contract::token_account, {from, system_contract::active_permission});
       transfer.send(from, to, quantity, memo);
    }
 
    void auth::to_rewards(const name &payer, const asset &quantity) {
-      eosiosystem::system_contract::torewards_action torewards(system_account, {payer, "active"_n});
+      system_contract::torewards_action torewards(system_account, {payer, system_contract::active_permission});
       torewards.send(payer, quantity);
    }
 
@@ -198,13 +241,6 @@ namespace eosio {
                                 return a + delim + b;
                              });
    }
-
-   void auth::cleartable( ) {
-      require_auth(_self);
-      for (auto _table_itr = authkeys_tbl.begin(); _table_itr != authkeys_tbl.end();) {
-         _table_itr = authkeys_tbl.erase(_table_itr);
-      }
-   }
 } /// namespace eosio
 
-EOSIO_DISPATCH( eosio::auth, (addkeyacc)(addkeyapp)(revokeacc)(revokeapp)(buyauth)(transfer)(setbpreward)(cleartable) )
+EOSIO_DISPATCH( eosio::auth, (addkeyacc)(addkeyapp)(revokeacc)(revokeapp)(buyauth)(transfer)(cleartable) )
