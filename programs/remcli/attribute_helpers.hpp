@@ -30,7 +30,6 @@ std::string decodeAttribute(const std::string& hex, int32_t type)
          v = fc::raw::unpack<int64_t>(data);
          break;
       case 3:
-         //TODO: check if we need to use chain_id_type instead of fc::sha256
          v = fc::raw::unpack<std::pair<fc::sha256, eosio::name>>(data);
          break;
       case 4:
@@ -52,8 +51,7 @@ std::string decodeAttribute(const std::string& hex, int32_t type)
          v = fc::raw::unpack<std::set<std::pair<eosio::name, std::string>>>(data);
          break;
       default:
-         //TODO: change exception type
-         EOS_ASSERT( false, eosio::chain::chain_type_exception, "Unknown attribute type" );
+         EOS_ASSERT( false, eosio::chain::unknown_attribute_type, "Unknown attribute type" );
    }
    return fc::json::to_pretty_string(v);
 }
@@ -115,7 +113,6 @@ std::vector<char> encodeAttribute(const std::string& json, int32_t type)
       bytes = fc::raw::pack(s);
    }
 
-   //TODO: change exception type
-   EOS_ASSERT( !bytes.empty(), eosio::chain::chain_type_exception, "Unknown attribute type" );
+   EOS_ASSERT( !bytes.empty(), eosio::chain::unknown_attribute_type, "Unknown attribute type" );
    return bytes;
 }

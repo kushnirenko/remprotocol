@@ -2414,8 +2414,7 @@ int main( int argc, char** argv ) {
          std::cerr << "Attribute info not found for " << getAttrName << std::endl;
          return;
       }
-      //TODO: change exception type
-      EOS_ASSERT( 1 == res.rows.size(), misc_exception, "More than one attribute_info" );
+      EOS_ASSERT( 1 == res.rows.size(), multiple_attribute_info, "More than one attribute_info" );
       const auto attr_type = res.rows[0].get_object()["type"].as_int64();
 
       eosio::uint128_t index_key = name(getAttrReceiver).value;
@@ -2877,7 +2876,7 @@ int main( int argc, char** argv ) {
          std::cerr << "Attribute info not found for " << setAttrName << std::endl;
          return;
       }
-      EOS_ASSERT( 1 == res.rows.size(), misc_exception, "More than one attribute_info" );
+      EOS_ASSERT( 1 == res.rows.size(), multiple_attribute_info, "More than one attribute_info" );
       const auto attr_type = res.rows[0].get_object()["type"].as_int64();
 
       std::cerr << localized("Setting attribute...") << std::endl;
