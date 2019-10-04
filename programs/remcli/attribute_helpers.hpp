@@ -36,7 +36,7 @@ std::string decodeAttribute(const std::string& hex, int32_t type)
          v = fc::raw::unpack<std::string>(data);
          break;
       case 5:
-         v = fc::raw::unpack<std::string>(data);
+         v = fc::time_point(fc::seconds(fc::raw::unpack<int64_t>(data)));
          break;
       case 6:
          v = fc::raw::unpack<std::string>(data);
@@ -88,9 +88,21 @@ std::vector<char> encodeAttribute(const std::string& json, int32_t type)
       bytes = fc::raw::pack(s);
    }
    else if (type == 5) {
-      std::string s;
-      fc::from_variant(v, s);
-      bytes = fc::raw::pack(s);
+      int64_t time = 0;
+      if (v.is_int64()) {
+         time = v.as_int64();
+      }
+      else {
+         std::string s;
+         fc::from_variant(v, s);
+         if (std::all_of(std::begin(s), std::end(s), [](const auto& ch) { return std::isdigit(ch); })) {
+            time = v.as_int64();
+         }
+         else {
+            time = fc::time_point_sec::from_iso_string(s).sec_since_epoch();
+         }
+      }
+      bytes = fc::raw::pack(time);
    }
    else if (type == 6) {
       std::string s;
