@@ -31,7 +31,8 @@ namespace eosio {
    class [[eosio::contract("rem.auth")]] auth : public contract {
    public:
 
-      auth(name receiver, name code,  datastream<const char*> ds);
+      auth(name receiver, name code,  datastream<const char*> ds)
+      :contract(receiver, code, ds), authkeys_tbl(_self, _self.value) {};
 
       /**
        * Add new authentication key action.
@@ -74,7 +75,7 @@ namespace eosio {
        * @details Revoke already added active authentication key by user account.
        *
        * @param account - the owner account to execute the revokeacc action for,
-       * @param key_str - the public key which is tied to the corresponding account.
+       * @param key_str - the public key to be revoked on the corresponding account.
        */
       [[eosio::action]]
       void revokeacc(const name &account, const string &key_str);
@@ -87,10 +88,10 @@ namespace eosio {
        * @param account - the owner account to execute the revokeacc action for,
        * @param revoke_key_str - the public key to be revoked on the corresponding account,
        * @param key_str - the public key which is tied to the corresponding account,
-       * @param signed_by_key - the signature that sign payload by key_str.
+       * @param signed_by_key - the signature that was signed by key_str.
        */
       [[eosio::action]]
-      void revokeapp(const name &account, const string &revoke_key_str,
+      void revokeapp(const name &account, const string &revocation_key_str,
                      const string &key_str, const signature &signed_by_key);
 
       /**
@@ -100,11 +101,11 @@ namespace eosio {
        *
        * @param account - the account to transfer from,
        * @param quantity - the quantity of AUTH credits to be purchased,
-       * @param max_price - the maximum price for one AUTH credit.
+       * @param max_price - the maximum price for one AUTH credit,
        * Amount of REM tokens that can be debited for one AUTH credit.
        */
       [[eosio::action]]
-      void buyauth(const name &account, const asset &quantity, const double max_price);
+      void buyauth(const name &account, const asset &quantity, const double &max_price);
 
       /**
        * Transfer action.
@@ -129,6 +130,7 @@ namespace eosio {
       using addkeyapp_action = action_wrapper<"addkeyapp"_n, &auth::addkeyapp>;
       using revokeacc_action = action_wrapper<"revokeacc"_n, &auth::revokeacc>;
       using revokeapp_action = action_wrapper<"revokeapp"_n, &auth::revokeapp>;
+      using buyauth_action = action_wrapper<"buyauth"_n, &auth::buyauth>;
       using transfer_action = action_wrapper<"transfer"_n, &auth::transfer>;
 
    private:
@@ -136,7 +138,6 @@ namespace eosio {
       const asset key_store_price{10000, auth_symbol};
 
       static constexpr name system_account = "rem"_n;
-      static constexpr name system_token_account = "rem.token"_n;
 
       const time_point key_lifetime = time_point(seconds(31104000)); // 360 days
 
@@ -169,24 +170,22 @@ namespace eosio {
 
       authkeys_inx authkeys_tbl;
 
-      void _addkey(const name& account, const public_key& device_key, const string& extra_key,
-                   const asset &price_limit, const name& payer);
-      void _revoke(const name &account, const public_key &key);
+      void sub_storage_fee(const name &account, const asset &price_limit);
+      void revoke_key(const name &account, const public_key &key);
 
       void issue_tokens(const asset &quantity);
       void retire_tokens(const asset &quantity);
       void transfer_tokens(const name &from, const name &to, const asset &quantity, const string &memo);
+      void to_rewards(const name& payer, const asset &quantity);
 
       auto get_authkey_it(const name &account, const public_key &key);
       asset get_balance( const name& token_contract_account, const name& owner, const symbol& sym );
       asset get_authrem_price(const asset &quantity);
-      void require_app_auth(const name &account, const public_key &key);
 
+      void require_app_auth(const name &account, const public_key &key);
       bool assert_recover_key(const checksum256 &digest, const signature &sign, const public_key &key);
-      void to_rewards(const name& payer, const asset &quantity);
 
       string join(vector <string> &&vec, string delim = string("*"));
-      uint64_t pow(uint64_t num, uint8_t& exp);
       checksum256 sha256(const string &str) {
          return eosio::sha256(str.c_str(), str.size());
       }

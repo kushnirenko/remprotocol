@@ -11,11 +11,7 @@ namespace eosio {
 
    using eosiosystem::system_contract;
 
-   auth::auth(name receiver, name code,  datastream<const char*> ds)
-   :contract(receiver, code, ds),
-    authkeys_tbl(_self, _self.value) {};
-
-   void auth::buyauth(const name &account, const asset &quantity, const double max_price) {
+   void auth::buyauth(const name &account, const asset &quantity, const double &max_price) {
       require_auth(account);
       check(quantity.is_valid(), "invalid quantity");
       check(quantity.amount > 0, "quantity should be a positive value");
@@ -39,17 +35,21 @@ namespace eosio {
       require_auth(account);
       require_auth(payer);
 
-      bool is_pay_by_auth = price_limit.symbol == auth_symbol;
-      bool is_pay_by_rem = price_limit.symbol == system_contract::get_core_symbol();
-      check(is_pay_by_rem || is_pay_by_auth, "unavailable payment method");
-      check(price_limit.is_valid(), "invalid price limit");
-      check(price_limit.amount > 0, "price limit should be a positive value");
-
       public_key key = string_to_public_key(key_str);
       checksum256 digest = sha256(join( { account.to_string(), key_str, extra_key, payer_str } ));
       eosio::assert_recover_key(digest, signed_by_key, key);
 
-      _addkey(account, key, extra_key, price_limit, payer);
+      authkeys_tbl.emplace(_self, [&](auto &k) {
+         k.N = authkeys_tbl.available_primary_key();
+         k.owner = account;
+         k.key = key;
+         k.extra_key = extra_key;
+         k.not_valid_before = current_time_point();
+         k.not_valid_after = current_time_point() + key_lifetime;
+         k.revoked_at = 0; // if not revoked == 0
+      });
+
+      sub_storage_fee(payer, price_limit);
    }
 
    auto auth::get_authkey_it(const name &account, const public_key &key) {
@@ -86,31 +86,41 @@ namespace eosio {
       public_key key = string_to_public_key(key_str);
 
       check(assert_recover_key(digest, signed_by_new_key, new_key), "expected key different than recovered new key");
-      check(assert_recover_key(digest, signed_by_key, key), "expected key different than recovered user key");
+      check(assert_recover_key(digest, signed_by_key, key), "expected key different than recovered account key");
       require_app_auth(account, key);
 
-      _addkey(account, key, extra_key, price_limit, payer);
+      authkeys_tbl.emplace(_self, [&](auto &k) {
+         k.N = authkeys_tbl.available_primary_key();
+         k.owner = account;
+         k.key = key;
+         k.extra_key = extra_key;
+         k.not_valid_before = current_time_point();
+         k.not_valid_after = current_time_point() + key_lifetime;
+         k.revoked_at = 0; // if not revoked == 0
+      });
+
+      sub_storage_fee(payer, price_limit);
    }
 
    void auth::revokeacc(const name &account, const string &key_str) {
       require_auth(account);
       public_key key = string_to_public_key(key_str);
 
-      _revoke(account, key);
+      revoke_key(account, key);
    }
 
-   void auth::revokeapp(const name &account, const string &revoke_key_str,
+   void auth::revokeapp(const name &account, const string &revocation_key_str,
                         const string &key_str, const signature &signed_by_key) {
-      public_key revoke_key = string_to_public_key(revoke_key_str);
+      public_key revocation_key = string_to_public_key(revocation_key_str);
       public_key key = string_to_public_key(key_str);
 
-      checksum256 digest = sha256(join( { account.to_string(), revoke_key_str, key_str } ));
+      checksum256 digest = sha256(join( { account.to_string(), revocation_key_str, key_str } ));
 
       public_key expected_key = recover_key(digest, signed_by_key);
-      check(expected_key == key, "expected key different than recovered user key");
+      check(expected_key == key, "expected key different than recovered account key");
       require_app_auth(account, key);
 
-      _revoke(account, revoke_key);
+      revoke_key(account, revocation_key);
    }
 
    void auth::transfer(const name &from, const name &to, const asset &quantity,
@@ -120,7 +130,7 @@ namespace eosio {
 
       public_key key = string_to_public_key(key_str);
       require_app_auth(from, key);
-      check(assert_recover_key(digest, signed_by_key, key), "expected key different than recovered user key");
+      check(assert_recover_key(digest, signed_by_key, key), "expected key different than recovered account key");
 
       transfer_tokens(from, to, quantity, string("authentication app transfer"));
    }
@@ -132,8 +142,7 @@ namespace eosio {
       }
    }
 
-   void auth::_addkey(const name& account, const public_key& key,
-                      const string& extra_key, const asset &price_limit, const name& payer) {
+   void auth::sub_storage_fee(const name &account, const asset &price_limit) {
 
       bool is_pay_by_auth = price_limit.symbol == auth_symbol;
       bool is_pay_by_rem = price_limit.symbol == system_contract::get_core_symbol();
@@ -142,41 +151,31 @@ namespace eosio {
       check(price_limit.amount > 0, "price limit should be a positive value");
 
       asset account_auth_balance = get_balance(system_contract::token_account, account, auth_symbol);
-      asset auth2rem_price{0, auth_symbol};
-      asset inline_buyauth_unit_price{0, auth_symbol};
+      asset authrem_price{0, auth_symbol};
+      asset buyauth_unit_price{0, auth_symbol};
 
       asset auth_credit_supply = token::get_supply(system_contract::token_account, auth_symbol.code());
       asset rem_balance = token::get_balance(system_contract::token_account, _self,
                                              system_contract::get_core_symbol().code());
 
       if (is_pay_by_rem) {
-         auth2rem_price = get_authrem_price(key_store_price);
-         check(auth2rem_price < price_limit, "currently rem-usd price is above price limit");
-         inline_buyauth_unit_price = key_store_price;
-         transfer_tokens(account, _self, auth2rem_price, "purchase fee AUTH tokens");
+         authrem_price = get_authrem_price(key_store_price);
+         check(authrem_price < price_limit, "currently rem-usd price is above price limit");
+         buyauth_unit_price = key_store_price;
+         transfer_tokens(account, _self, authrem_price, "purchase fee REM tokens");
       } else {
          check(auth_credit_supply.amount > 0, "overdrawn balance");
-         transfer_tokens(account, _self, key_store_price, "buying an auth token");
+         transfer_tokens(account, _self, key_store_price, "purchase fee AUTH tokens");
          retire_tokens(key_store_price);
       }
 
-      double reward_amount = (rem_balance.amount + auth2rem_price.amount) /
-         double(auth_credit_supply.amount + inline_buyauth_unit_price.amount);
+      double reward_amount = (rem_balance.amount + authrem_price.amount) /
+         double(auth_credit_supply.amount + buyauth_unit_price.amount);
 
       to_rewards(_self, asset{static_cast<int64_t>(reward_amount * 10000), system_contract::get_core_symbol()});
-
-      authkeys_tbl.emplace(_self, [&](auto &k) {
-         k.N = authkeys_tbl.available_primary_key();
-         k.owner = account;
-         k.key = key;
-         k.extra_key = extra_key;
-         k.not_valid_before = current_time_point();
-         k.not_valid_after = current_time_point() + key_lifetime;
-         k.revoked_at = 0; // if not revoked == 0
-      });
    }
 
-   void auth::_revoke(const name &account, const public_key &key) {
+   void auth::revoke_key(const name &account, const public_key &key) {
       require_app_auth(account, key);
 
       auto it = get_authkey_it(account, key);
@@ -197,8 +196,8 @@ namespace eosio {
       check(it != authkeys_idx.end(), "account has no active app keys");
    }
 
-   asset auth::get_balance( const name& token_contract_account, const name& owner, const symbol& sym ) {
-      accounts accountstable( token_contract_account, owner.value );
+   asset auth::get_balance(const name& token_contract_account, const name& owner, const symbol& sym) {
+      accounts accountstable(token_contract_account, owner.value);
       const auto it = accountstable.find(sym.code().raw());
       return it == accountstable.end() ? asset{0, sym} : it->balance;
    }
