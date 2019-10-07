@@ -7,6 +7,9 @@
 #include <fc/variant.hpp>
 #include <fc/io/json.hpp>
 
+#include <multibase/basic_codec.h>
+#include <multibase/multibase.h>
+
 
 std::string decodeAttribute(const std::string& hex, int32_t type)
 {
@@ -39,13 +42,13 @@ std::string decodeAttribute(const std::string& hex, int32_t type)
          v = fc::time_point(fc::seconds(fc::raw::unpack<int64_t>(data)));
          break;
       case 6:
-         v = fc::raw::unpack<std::string>(data);
+         v = data;
          break;
       case 7:
          v = fc::raw::unpack<std::string>(data);
          break;
       case 8:
-         v = fc::raw::unpack<std::vector<char>>(data);
+         v = data;
          break;
       case 9:
          v = fc::raw::unpack<std::set<std::pair<eosio::name, std::string>>>(data);
@@ -107,7 +110,16 @@ std::vector<char> encodeAttribute(const std::string& json, int32_t type)
    else if (type == 6) {
       std::string s;
       fc::from_variant(v, s);
-      bytes = fc::raw::pack(s);
+      if (s.size() == 46 && s.substr(0, 2) == "Qm") { //CiD v0 starts with 'Qm'
+         auto codec = multibase::base_58_btc{};
+         auto decoded = codec.decode(s);
+         std::copy(std::begin(decoded), std::end(decoded), std::back_inserter<std::vector<char>>(bytes));
+      }
+      else {
+         auto decoded = multibase::decode(s);
+         EOS_ASSERT(static_cast<int>(decoded.front()) != 18, eosio::chain::invalid_cid_encoding, "Invalid CID encoding" );
+         std::copy(std::begin(decoded), std::end(decoded), std::back_inserter<std::vector<char>>(bytes));
+      }
    }
    else if (type == 7) {
       std::string s;

@@ -2439,9 +2439,9 @@ int main( int argc, char** argv ) {
       const auto attr_string = res.rows[0].get_object()["attribute"]["data"].as_string();
       auto decoded_attribute = decodeAttribute(attr_string, attr_type);
       const auto pending_attr_string = res.rows[0].get_object()["attribute"]["pending"].as_string();
-      auto decoded_pending_ttribute = decodeAttribute(pending_attr_string, attr_type);
+      auto decoded_pending_attribute = decodeAttribute(pending_attr_string, attr_type);
       std::cout << localized("Attribute:\n  Name: ${name}\n  Issuer: ${issuer}\n  Receiver: ${receiver}\n  Value:\n${value}\n  Pending value:\n${pending}",
-         ("name", getAttrName)("issuer", getAttrIssuer)("receiver", getAttrReceiver)("value", decoded_attribute)("pending", decoded_pending_ttribute)) << std::endl;
+         ("name", getAttrName)("issuer", getAttrIssuer)("receiver", getAttrReceiver)("value", decoded_attribute)("pending", decoded_pending_attribute)) << std::endl;
    });
 
    // get block
