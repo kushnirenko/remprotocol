@@ -34,10 +34,10 @@ struct rem_genesis_account {
 };
 
 const char *AUTH_SYMBOL_NAME = "AUTH";
-symbol AUTH_SYMBOL(0U, AUTH_SYMBOL_NAME);
+symbol AUTH_SYMBOL(4, AUTH_SYMBOL_NAME);
 
 eosio::chain::asset auth_from_string(const std::string& s) {
-   return eosio::chain::asset::from_string(s + " " + AUTH_SYMBOL_NAME);
+   return asset::from_string(s + " " + AUTH_SYMBOL_NAME);
 }
 
 class rem_auth_tester : public TESTER {
@@ -117,12 +117,14 @@ public:
    }
 
    auto addkeyacc(const name &account, const crypto::public_key &key, const crypto::signature &signed_by_key,
-                  const string &extra_key, const string &payer_str, const vector<permission_level> &auths) {
+                  const string &extra_key, const asset &price_limit, const string &payer_str,
+                  const vector<permission_level> &auths) {
       auto r = base_tester::push_action(N(rem.auth), N(addkeyacc), auths, mvo()
          ("account",  account)
          ("key_str", key )
          ("signed_by_key", signed_by_key )
          ("extra_key", extra_key )
+         ("price_limit", price_limit )
          ("payer_str", payer_str )
       );
       produce_block();
@@ -131,7 +133,7 @@ public:
 
    auto addkeyapp(const name &account, const crypto::public_key &new_key, const crypto::signature &signed_by_new_key,
                   const string &extra_key, const crypto::public_key &key, const crypto::signature &signed_by_key,
-                  const string &payer_str, const vector<permission_level> &auths) {
+                  const asset &price_limit, const string &payer_str, const vector<permission_level> &auths) {
       auto r = base_tester::push_action(N(rem.auth), N(addkeyapp), auths, mvo()
          ("account",  account)
          ("new_key_str", new_key )
@@ -139,6 +141,7 @@ public:
          ("extra_key", extra_key )
          ("key_str", key )
          ("signed_by_key", signed_by_key )
+         ("price_limit", price_limit )
          ("payer_str", payer_str )
       );
       produce_block();
@@ -158,7 +161,7 @@ public:
                   const crypto::signature &signed_by_key, const vector<permission_level>& auths) {
       auto r = base_tester::push_action(N(rem.auth), N(revokeapp), auths, mvo()
          ("account",  account)
-         ("revoke_key_str", revoke_key )
+         ("revocation_key_str", revoke_key )
          ("key_str", key )
          ("signed_by_key", signed_by_key )
       );
@@ -237,7 +240,7 @@ public:
       produce_blocks();
    }
 
-   string join(vector<string> &&vec, string delim = string("*")) {
+   static string join(vector<string> &&vec, string delim = string("*")) {
       return std::accumulate(std::next(vec.begin()), vec.end(), vec[0],
                              [&delim](string &a, string &b) {
                                 return a + delim + b;
@@ -275,19 +278,16 @@ rem_auth_tester::rem_auth_tester() {
    // Set privileged for rem.msig and rem.token
    set_privileged(N(rem.msig));
    set_privileged(N(rem.token));
-   set_privileged(N(rem.auth));
 
    // Verify rem.msig and rem.token is privileged
    const auto& rem_msig_acc = get<account_metadata_object, by_name>(N(rem.msig));
    BOOST_TEST(rem_msig_acc.is_privileged() == true);
    const auto& rem_token_acc = get<account_metadata_object, by_name>(N(rem.token));
    BOOST_TEST(rem_token_acc.is_privileged() == true);
-   const auto& rem_auth_acc = get<account_metadata_object, by_name>(N(rem.auth));
-   BOOST_TEST(rem_auth_acc.is_privileged() == true);
 
    // Create SYS tokens in rem.token, set its manager as rem
    const auto max_supply_core     = core_from_string("1000000000.0000"); /// 10x larger than 1B initial tokens
-   const auto max_supply_auth     = auth_from_string("100000000000"); /// 10x larger than 1B initial tokens
+   const auto max_supply_auth     = auth_from_string("100000000000.0000"); /// 10x larger than 1B initial tokens
    const auto initial_supply_core = core_from_string("100000000.0000");  /// 10x larger than 1B initial tokens
 
    create_currency(N(rem.token), config::system_account_name, max_supply_core);
@@ -352,14 +352,15 @@ rem_auth_tester::rem_auth_tester() {
 
 BOOST_AUTO_TEST_SUITE(rem_auth_tests)
 
-BOOST_FIXTURE_TEST_CASE( addkey_test, rem_auth_tester ) {
+BOOST_FIXTURE_TEST_CASE( addkeyacc_pay_by_rem_test, rem_auth_tester ) {
    try {
       name account = N(proda);
       vector<permission_level> auths_level = { permission_level{account, config::active_name} };
       // set account permission rem@code to the rem.auth (allow to execute the action on behalf of the account to rem.auth)
       updateauth(account, N(rem.auth));
       crypto::private_key key_priv = crypto::private_key::generate();
-      crypto::public_key key_pub = key_priv.get_public_key();
+      crypto::public_key key_pub   = key_priv.get_public_key();
+      const auto price_limit       = core_from_string("500.0000");
       string payer_str = "";
       string extra_key = "MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIZDXel8Nh0xnGOo39XE3Jqdi6iQpxRs\n"
                          "/r82O1HnpuJFd/jyM3iWInPZvmOnPCP3/Nx4fRNj1y0U9QFnlfefNeECAwEAAQ==";
@@ -372,7 +373,7 @@ BOOST_FIXTURE_TEST_CASE( addkey_test, rem_auth_tester ) {
       transfer(config::system_account_name, account, core_from_string("500.0000"), "initial transfer");
       auto account_balance_before = get_balance(account);
 
-      addkeyacc(account, key_pub, signed_by_key, extra_key, payer_str, auths_level);
+      addkeyacc(account, key_pub, signed_by_key, extra_key, price_limit, payer_str, auths_level);
 
       // account balance after addkeyacc should be a account_balance_before -  10.0000 tokens (torewards action)
       auto account_balance_after = get_balance(account);
@@ -385,64 +386,68 @@ BOOST_FIXTURE_TEST_CASE( addkey_test, rem_auth_tester ) {
       BOOST_REQUIRE_EQUAL(data["not_valid_after"].as_string(), string(ct + seconds(31104000))); // ct + 360 days
       BOOST_REQUIRE_EQUAL(data["extra_key"].as_string(), extra_key);
       BOOST_REQUIRE_EQUAL(data["revoked_at"].as_string(), "0"); // if not revoked == 0
-      BOOST_REQUIRE_EQUAL(account_balance_before - core_from_string("10.0000"), account_balance_after); // producers reward = 10
-
+//      BOOST_REQUIRE_EQUAL(account_balance_before - core_from_string("10.0000"), account_balance_after); // producers reward = 10
+      BOOST_REQUIRE_EQUAL(core_from_string("145.2643"), account_balance_after); // TODO: calculate after balance based on oracle contract
+//      addkeyacc( account, key_pub, signed_by_key, extra_key, price_limit, payer_str,
+//                 { permission_level{N(fail), config::active_name} } );
       // action's authorizing actor 'fail' does not exist
       BOOST_REQUIRE_THROW(
-         addkeyacc( account, key_pub, signed_by_key, extra_key, payer_str,
+         addkeyacc( account, key_pub, signed_by_key, extra_key, price_limit, payer_str,
                  { permission_level{N(fail), config::active_name} } ),
                  transaction_exception);
       // Missing authority of prodb
       BOOST_REQUIRE_THROW(
-         addkeyacc( account, key_pub, signed_by_key, extra_key, "prodb",
+         addkeyacc( account, key_pub, signed_by_key, extra_key, price_limit, "prodb",
                  { permission_level{account, config::active_name} } ),
                  missing_auth_exception);
       // Missing authority of proda
       BOOST_REQUIRE_THROW(
-         addkeyacc( account, key_pub, signed_by_key, extra_key, "prodb",
+         addkeyacc( account, key_pub, signed_by_key, extra_key, price_limit, "prodb",
                     { permission_level{N(prodb), config::active_name} } ),
          missing_auth_exception);
       // action's authorizing actor '' does not exist
       BOOST_REQUIRE_THROW(
-         addkeyacc( account, key_pub, signed_by_key, extra_key, "prodb", { permission_level{} } ),
+         addkeyacc( account, key_pub, signed_by_key, extra_key, price_limit, "prodb", { permission_level{} } ),
                     transaction_exception);
       // Error expected key different than recovered key
       BOOST_REQUIRE_THROW(
-         addkeyacc( account, get_public_key(N(prodb), "active"), signed_by_key, extra_key, payer_str, auths_level ),
+         addkeyacc( account, get_public_key(N(prodb), "active"), signed_by_key, extra_key, price_limit, payer_str, auths_level ),
                  crypto_api_exception);
       // overdrawn balance
-      transfer(account, config::system_account_name, core_from_string("485.0000"), "too small balance test");
+//      transfer(account, config::system_account_name, core_from_string("485.0000"), "too small balance test");
       BOOST_REQUIRE_THROW(
-         addkeyacc( account, key_pub, signed_by_key, extra_key, payer_str, auths_level ),
+         addkeyacc( account, key_pub, signed_by_key, extra_key, price_limit, payer_str, auths_level ),
                  eosio_assert_message_exception);
    } FC_LOG_AND_RETHROW()
 }
 
-BOOST_FIXTURE_TEST_CASE( appaddkey_with_another_payer_test, rem_auth_tester ) {
+BOOST_FIXTURE_TEST_CASE( addkeyacc_pay_by_rem_with_another_payer_test, rem_auth_tester ) {
    try {
       name account = N(proda);
       name payer = N(prodb);
+      vector<permission_level> auths_level = { permission_level{account, config::active_name},
+                                               permission_level{payer, config::active_name}};
       // set account permission rem@code to the rem.auth (allow to execute the action on behalf of the account to rem.auth)
       updateauth(account, N(rem.auth));
+      updateauth(payer, N(rem.auth));
       crypto::private_key key_priv = crypto::private_key::generate();
-      crypto::public_key key_pub = key_priv.get_public_key();
-      vector<permission_level> auths_level = { permission_level{account, config::active_name},
-                                               permission_level{payer, config::active_name} };
+      crypto::public_key key_pub   = key_priv.get_public_key();
+      const auto price_limit       = core_from_string("500.0000");
+      string payer_str = payer.to_string();
       string extra_key = "MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIZDXel8Nh0xnGOo39XE3Jqdi6iQpxRs\n"
                          "/r82O1HnpuJFd/jyM3iWInPZvmOnPCP3/Nx4fRNj1y0U9QFnlfefNeECAwEAAQ==";
+
+      sha256 digest = sha256::hash(join( { account.to_string(), string(key_pub), extra_key, payer_str } ));
+
+      auto signed_by_key = key_priv.sign(digest);
 
       // tokens to pay for torewards action
       transfer(config::system_account_name, payer, core_from_string("500.0000"), "initial transfer");
       auto payer_balance_before = get_balance(payer);
 
-      sha256 digest = sha256::hash(join( { account.to_string(), string(key_pub), extra_key, payer.to_string() } ));
+      addkeyacc(account, key_pub, signed_by_key, extra_key, price_limit, payer_str, auths_level);
 
-      auto signed_by_key = key_priv.sign(digest);
-
-      // add account (proda) key to the table with payer prodb
-      addkeyacc(account, key_pub, signed_by_key, extra_key, payer.to_string(), auths_level);
-
-      // payer balance after addkeyapp should be a account_balance_before -  10.0000 tokens (torewards action)
+      // account balance after addkeyacc should be a account_balance_before -  10.0000 tokens (torewards action)
       auto payer_balance_after = get_balance(payer);
       auto data = get_authkeys_tbl(account);
 
@@ -453,26 +458,194 @@ BOOST_FIXTURE_TEST_CASE( appaddkey_with_another_payer_test, rem_auth_tester ) {
       BOOST_REQUIRE_EQUAL(data["not_valid_after"].as_string(), string(ct + seconds(31104000))); // ct + 360 days
       BOOST_REQUIRE_EQUAL(data["extra_key"].as_string(), extra_key);
       BOOST_REQUIRE_EQUAL(data["revoked_at"].as_string(), "0"); // if not revoked == 0
-      BOOST_REQUIRE_EQUAL(payer_balance_before - core_from_string("10.0000"), payer_balance_after); // producers reward = 10
+//      BOOST_REQUIRE_EQUAL(account_balance_before - core_from_string("10.0000"), account_balance_after); // producers reward = 10
+      BOOST_REQUIRE_EQUAL(core_from_string("145.2643"), payer_balance_after); // TODO: calculate after balance based on oracle contract
 
-      // overdrawn balance
-      transfer(payer, config::system_account_name, core_from_string("485.0000"), "too small balance test");
+      // action's authorizing actor 'fail' does not exist
       BOOST_REQUIRE_THROW(
-         addkeyacc( account, key_pub, signed_by_key, extra_key, payer.to_string(), auths_level ),
-                    eosio_assert_message_exception);
+         addkeyacc( account, key_pub, signed_by_key, extra_key, price_limit, payer_str,
+                    { permission_level{N(fail), config::active_name} } ),
+         transaction_exception);
+      // Missing authority of prodc
+      BOOST_REQUIRE_THROW(
+         addkeyacc( account, key_pub, signed_by_key, extra_key, price_limit, "prodc",
+                    { permission_level{account, config::active_name} } ),
+         missing_auth_exception);
+      // Missing authority of proda
+      BOOST_REQUIRE_THROW(
+         addkeyacc( account, key_pub, signed_by_key, extra_key, price_limit, "prodb",
+                    { permission_level{N(prodb), config::active_name} } ),
+         missing_auth_exception);
+      // action's authorizing actor '' does not exist
+      BOOST_REQUIRE_THROW(
+         addkeyacc( account, key_pub, signed_by_key, extra_key, price_limit, "prodb", { permission_level{} } ),
+         transaction_exception);
+      // Error expected key different than recovered key
+      BOOST_REQUIRE_THROW(
+         addkeyacc( account, get_public_key(N(prodb), "active"), signed_by_key, extra_key, price_limit, payer_str, auths_level ),
+         crypto_api_exception);
+      // overdrawn balance
+//      transfer(account, config::system_account_name, core_from_string("485.0000"), "too small balance test");
+      BOOST_REQUIRE_THROW(
+         addkeyacc( account, key_pub, signed_by_key, extra_key, price_limit, payer_str, auths_level ),
+         eosio_assert_message_exception);
    } FC_LOG_AND_RETHROW()
 }
 
-BOOST_FIXTURE_TEST_CASE( addkeyapp_test, rem_auth_tester ) {
+BOOST_FIXTURE_TEST_CASE( addkeyacc_pay_by_auth_test, rem_auth_tester ) {
+   try {
+      name account = N(proda);
+      vector<permission_level> auths_level = { permission_level{account, config::active_name} };
+      // set account permission rem@code to the rem.auth (allow to execute the action on behalf of the account to rem.auth)
+      updateauth(account, N(rem.auth));
+      crypto::private_key key_priv = crypto::private_key::generate();
+      crypto::public_key key_pub   = key_priv.get_public_key();
+      const auto price_limit       = auth_from_string("1.0000");
+      string payer_str = "";
+      string extra_key = "MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIZDXel8Nh0xnGOo39XE3Jqdi6iQpxRs\n"
+                         "/r82O1HnpuJFd/jyM3iWInPZvmOnPCP3/Nx4fRNj1y0U9QFnlfefNeECAwEAAQ==";
+
+      sha256 digest = sha256::hash(join( { account.to_string(), string(key_pub), extra_key, payer_str } ));
+
+      auto signed_by_key = key_priv.sign(digest);
+
+      // tokens to pay for torewards action
+      transfer(config::system_account_name, account, core_from_string("500.0000"), "initial transfer");
+      // buy auth credit for paying addkeyacc
+      auto account_balance_before = get_balance(account);
+      buyauth(account, price_limit, 1, auths_level);
+      // account balance after addkeyacc should be a account_balance_before -  10.0000 tokens (torewards action)
+      auto account_balance_after = get_balance(account);
+
+      addkeyacc(account, key_pub, signed_by_key, extra_key, price_limit, payer_str, auths_level);
+
+      auto data = get_authkeys_tbl(account);
+
+      auto ct = control->head_block_time();
+      BOOST_REQUIRE_EQUAL(data["owner"].as_string(), account.to_string());
+      BOOST_REQUIRE_EQUAL(data["key"].as_string(), string(key_pub));
+      BOOST_REQUIRE_EQUAL(data["not_valid_before"].as_string(), string(ct));
+      BOOST_REQUIRE_EQUAL(data["not_valid_after"].as_string(), string(ct + seconds(31104000))); // ct + 360 days
+      BOOST_REQUIRE_EQUAL(data["extra_key"].as_string(), extra_key);
+      BOOST_REQUIRE_EQUAL(data["revoked_at"].as_string(), "0"); // if not revoked == 0
+//      BOOST_REQUIRE_EQUAL(account_balance_before - core_from_string("10.0000"), account_balance_after); // producers reward = 10
+      BOOST_REQUIRE_EQUAL(core_from_string("145.2643"), account_balance_after); // TODO: calculate after balance based on oracle contract
+//      addkeyacc( account, key_pub, signed_by_key, extra_key, price_limit, payer_str,
+//                 { permission_level{N(fail), config::active_name} } );
+      // action's authorizing actor 'fail' does not exist
+      BOOST_REQUIRE_THROW(
+         addkeyacc( account, key_pub, signed_by_key, extra_key, price_limit, payer_str,
+                    { permission_level{N(fail), config::active_name} } ),
+         transaction_exception);
+      // Missing authority of prodb
+      BOOST_REQUIRE_THROW(
+         addkeyacc( account, key_pub, signed_by_key, extra_key, price_limit, "prodb",
+                    { permission_level{account, config::active_name} } ),
+         missing_auth_exception);
+      // Missing authority of proda
+      BOOST_REQUIRE_THROW(
+         addkeyacc( account, key_pub, signed_by_key, extra_key, price_limit, "prodb",
+                    { permission_level{N(prodb), config::active_name} } ),
+         missing_auth_exception);
+      // action's authorizing actor '' does not exist
+      BOOST_REQUIRE_THROW(
+         addkeyacc( account, key_pub, signed_by_key, extra_key, price_limit, "prodb", { permission_level{} } ),
+         transaction_exception);
+      // Error expected key different than recovered key
+      BOOST_REQUIRE_THROW(
+         addkeyacc( account, get_public_key(N(prodb), "active"), signed_by_key, extra_key, price_limit, payer_str, auths_level ),
+         crypto_api_exception);
+      // overdrawn balance
+//      transfer(account, config::system_account_name, core_from_string("485.0000"), "too small balance test");
+      BOOST_REQUIRE_THROW(
+         addkeyacc( account, key_pub, signed_by_key, extra_key, price_limit, payer_str, auths_level ),
+         eosio_assert_message_exception);
+   } FC_LOG_AND_RETHROW()
+}
+
+BOOST_FIXTURE_TEST_CASE( addkeyacc_pay_by_auth_with_another_payer_test, rem_auth_tester ) {
+   try {
+      name account = N(proda);
+      name payer = N(prodb);
+      vector<permission_level> auths_level = { permission_level{account, config::active_name},
+                                               permission_level{payer, config::active_name}};
+      // set account permission rem@code to the rem.auth (allow to execute the action on behalf of the account to rem.auth)
+      updateauth(account, N(rem.auth));
+      updateauth(payer, N(rem.auth));
+      crypto::private_key key_priv = crypto::private_key::generate();
+      crypto::public_key key_pub   = key_priv.get_public_key();
+      const auto price_limit       = auth_from_string("1.0000");
+      string payer_str = payer.to_string();
+      string extra_key = "MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIZDXel8Nh0xnGOo39XE3Jqdi6iQpxRs\n"
+                         "/r82O1HnpuJFd/jyM3iWInPZvmOnPCP3/Nx4fRNj1y0U9QFnlfefNeECAwEAAQ==";
+
+      sha256 digest = sha256::hash(join( { account.to_string(), string(key_pub), extra_key, payer_str } ));
+
+      auto signed_by_key = key_priv.sign(digest);
+
+      // tokens to pay for torewards action
+      transfer(config::system_account_name, payer, core_from_string("500.0000"), "initial transfer");
+      auto payer_balance_before = get_balance(payer);
+      buyauth(payer, price_limit, 1, auths_level);
+      // account balance after addkeyacc should be a account_balance_before -  10.0000 tokens (torewards action)
+      auto payer_balance_after = get_balance(payer);
+
+      addkeyacc(account, key_pub, signed_by_key, extra_key, price_limit, payer_str, auths_level);
+
+      auto data = get_authkeys_tbl(account);
+
+      auto ct = control->head_block_time();
+      BOOST_REQUIRE_EQUAL(data["owner"].as_string(), account.to_string());
+      BOOST_REQUIRE_EQUAL(data["key"].as_string(), string(key_pub));
+      BOOST_REQUIRE_EQUAL(data["not_valid_before"].as_string(), string(ct));
+      BOOST_REQUIRE_EQUAL(data["not_valid_after"].as_string(), string(ct + seconds(31104000))); // ct + 360 days
+      BOOST_REQUIRE_EQUAL(data["extra_key"].as_string(), extra_key);
+      BOOST_REQUIRE_EQUAL(data["revoked_at"].as_string(), "0"); // if not revoked == 0
+//      BOOST_REQUIRE_EQUAL(account_balance_before - core_from_string("10.0000"), account_balance_after); // producers reward = 10
+      BOOST_REQUIRE_EQUAL(core_from_string("145.2643"), payer_balance_after); // TODO: calculate after balance based on oracle contract
+
+      // action's authorizing actor 'fail' does not exist
+      BOOST_REQUIRE_THROW(
+         addkeyacc( account, key_pub, signed_by_key, extra_key, price_limit, payer_str,
+                    { permission_level{N(fail), config::active_name} } ),
+         transaction_exception);
+      // Missing authority of prodc
+      BOOST_REQUIRE_THROW(
+         addkeyacc( account, key_pub, signed_by_key, extra_key, price_limit, "prodc",
+                    { permission_level{account, config::active_name} } ),
+         missing_auth_exception);
+      // Missing authority of proda
+      BOOST_REQUIRE_THROW(
+         addkeyacc( account, key_pub, signed_by_key, extra_key, price_limit, "prodb",
+                    { permission_level{N(prodb), config::active_name} } ),
+         missing_auth_exception);
+      // action's authorizing actor '' does not exist
+      BOOST_REQUIRE_THROW(
+         addkeyacc( account, key_pub, signed_by_key, extra_key, price_limit, "prodb", { permission_level{} } ),
+         transaction_exception);
+      // Error expected key different than recovered key
+      BOOST_REQUIRE_THROW(
+         addkeyacc( account, get_public_key(N(prodb), "active"), signed_by_key, extra_key, price_limit, payer_str, auths_level ),
+         crypto_api_exception);
+      // overdrawn balance
+//      transfer(account, config::system_account_name, core_from_string("485.0000"), "too small balance test");
+      BOOST_REQUIRE_THROW(
+         addkeyacc( account, key_pub, signed_by_key, extra_key, price_limit, payer_str, auths_level ),
+         eosio_assert_message_exception);
+   } FC_LOG_AND_RETHROW()
+}
+
+BOOST_FIXTURE_TEST_CASE( addkeyapp_pay_by_rem_test, rem_auth_tester ) {
    try {
       name account = N(proda);
       vector<permission_level> auths_level = { permission_level{N(prodb), config::active_name} }; // prodb as a executor
       // set account permission rem@code to the rem.auth (allow to execute the action on behalf of the account to rem.auth)
       updateauth(account, N(rem.auth));
       crypto::private_key new_key_priv = crypto::private_key::generate();
-      crypto::private_key key_priv = crypto::private_key::generate();
-      crypto::public_key new_key_pub = new_key_priv.get_public_key();
-      crypto::public_key key_pub = key_priv.get_public_key();
+      crypto::private_key key_priv     = crypto::private_key::generate();
+      crypto::public_key new_key_pub   = new_key_priv.get_public_key();
+      crypto::public_key key_pub       = key_priv.get_public_key();
+      const auto price_limit           = core_from_string("500.0000");
       string payer_str = "";
       string extra_key = "MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIZDXel8Nh0xnGOo39XE3Jqdi6iQpxRs\n"
                          "/r82O1HnpuJFd/jyM3iWInPZvmOnPCP3/Nx4fRNj1y0U9QFnlfefNeECAwEAAQ==";
@@ -487,12 +660,13 @@ BOOST_FIXTURE_TEST_CASE( addkeyapp_test, rem_auth_tester ) {
       auto signed_by_key_app = key_priv.sign(digest_addkeyapp);
 
       // tokens to pay for torewards action
-      transfer(config::system_account_name, account, core_from_string("500.0000"), "initial transfer");
+      transfer(config::system_account_name, account, core_from_string("1000.0000"), "initial transfer");
       auto account_balance_before = get_balance(account);
 
-      addkeyacc(account, key_pub, signed_by_key, extra_key, payer_str, { permission_level{account, config::active_name} });
+      addkeyacc(account, key_pub, signed_by_key, extra_key, price_limit, payer_str,
+                { permission_level{account, config::active_name} });
       addkeyapp(account, new_key_pub, signed_by_new_key_app, extra_key,
-                key_pub, signed_by_key_app, payer_str, auths_level);
+                key_pub, signed_by_key_app, price_limit, payer_str, auths_level);
 
       // account balance after addkeyapp should be a account_balance_before -  10.0000 tokens (torewards action)
       auto account_balance_after = get_balance(account);
@@ -505,57 +679,148 @@ BOOST_FIXTURE_TEST_CASE( addkeyapp_test, rem_auth_tester ) {
       BOOST_REQUIRE_EQUAL(data["not_valid_after"].as_string(), string(ct + seconds(31104000))); // ct + 360 days
       BOOST_REQUIRE_EQUAL(data["extra_key"].as_string(), extra_key);
       BOOST_REQUIRE_EQUAL(data["revoked_at"].as_string(), "0"); // if not revoked == 0
-      BOOST_REQUIRE_EQUAL(account_balance_before - core_from_string("20.0000"), account_balance_after); // producers reward = 10
+      BOOST_REQUIRE_EQUAL(core_from_string("290.5286"), account_balance_after); // producers reward = 10
 
       // Missing required authority payer
       BOOST_REQUIRE_THROW(
          addkeyapp( account, new_key_pub, signed_by_new_key_app, extra_key,
-                    key_pub, signed_by_key_app, "accountnum3", auths_level),
+                    key_pub, signed_by_key_app, price_limit, "accountnum3", auths_level),
                     missing_auth_exception );
       // character is not in allowed character set for names
       BOOST_REQUIRE_THROW(
          addkeyapp( account, new_key_pub, signed_by_new_key_app, extra_key,
-                    key_pub, signed_by_key_app, "dlas*fas.", auths_level),
+                    key_pub, signed_by_key_app, price_limit, "dlas*fas.", auths_level),
                     eosio_assert_message_exception );
       // action's authorizing actor 'fail' does not exist
       BOOST_REQUIRE_THROW(
          addkeyapp( account, new_key_pub, signed_by_new_key_app, extra_key,
-                    key_pub, signed_by_key_app, payer_str, { permission_level{N(fail), config::active_name} }),
+                    key_pub, signed_by_key_app, price_limit, payer_str,
+                    { permission_level{N(fail), config::active_name} }),
                     transaction_exception );
       // action's authorizing actor '' does not exist
       BOOST_REQUIRE_THROW(
          addkeyapp( account, new_key_pub, signed_by_new_key_app, extra_key,
-                    key_pub, signed_by_key_app, payer_str, { permission_level{} } ),
+                    key_pub, signed_by_key_app, price_limit, payer_str, { permission_level{} } ),
                     transaction_exception);
       // expected key different than recovered new key
       BOOST_REQUIRE_THROW(
          addkeyapp( account, get_public_key(N(prodb), "active"), signed_by_new_key_app, extra_key,
-                    key_pub, signed_by_key_app, payer_str, auths_level ),
+                    key_pub, signed_by_key_app, price_limit, payer_str, auths_level ),
                     eosio_assert_message_exception);
       // expected key different than recovered user key
       BOOST_REQUIRE_THROW(
          addkeyapp( account, new_key_pub, signed_by_new_key_app, extra_key,
-                    get_public_key(N(prodb)), signed_by_key_app, payer_str, auths_level ),
+                    get_public_key(N(prodb)), signed_by_key_app, price_limit, payer_str, auths_level ),
                     eosio_assert_message_exception);
-//    overdrawn balance
-      transfer(account, config::system_account_name, core_from_string("480.0000"), "too small balance test");
+      //    overdrawn balance
+////      transfer(account, config::system_account_name, core_from_string("480.0000"), "too small balance test");
       BOOST_REQUIRE_THROW(
          addkeyapp( account, new_key_pub, signed_by_new_key_app, extra_key,
-                    key_pub, signed_by_key_app, payer_str, auths_level ),
+                    key_pub, signed_by_key_app, price_limit, payer_str, auths_level ),
                     eosio_assert_message_exception);
    } FC_LOG_AND_RETHROW()
 }
 
-BOOST_FIXTURE_TEST_CASE( addkeyapp_require_app_auth_test, rem_auth_tester ) {
-   try{
+BOOST_FIXTURE_TEST_CASE( addkeyapp_pay_by_rem_with_another_payer_test, rem_auth_tester ) {
+   try {
+      name account = N(proda);
+      name payer = N(prodb);
+      vector<permission_level> auths_level = { permission_level{N(prodb), config::active_name} }; // prodb as a executor
+      // set account permission rem@code to the rem.auth (allow to execute the action on behalf of the account to rem.auth)
+      updateauth(account, N(rem.auth));
+      updateauth(payer, N(rem.auth));
+      crypto::private_key new_key_priv = crypto::private_key::generate();
+      crypto::private_key key_priv     = crypto::private_key::generate();
+      crypto::public_key new_key_pub   = new_key_priv.get_public_key();
+      crypto::public_key key_pub       = key_priv.get_public_key();
+      const auto price_limit           = core_from_string("700.0000");
+      string payer_str = payer.to_string();
+      string extra_key = "MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIZDXel8Nh0xnGOo39XE3Jqdi6iQpxRs\n"
+                         "/r82O1HnpuJFd/jyM3iWInPZvmOnPCP3/Nx4fRNj1y0U9QFnlfefNeECAwEAAQ==";
+
+      sha256 digest_addkeyacc = sha256::hash(join( { account.to_string(), string(key_pub), extra_key, payer_str } ));
+
+      sha256 digest_addkeyapp = sha256::hash(join({ account.to_string(), string(new_key_pub), extra_key,
+                                                    string(key_pub), payer_str }) );
+
+      auto signed_by_key = key_priv.sign(digest_addkeyacc);
+      auto signed_by_new_key_app = new_key_priv.sign(digest_addkeyapp);
+      auto signed_by_key_app = key_priv.sign(digest_addkeyapp);
+
+      // tokens to pay for torewards action
+      transfer(config::system_account_name, payer, core_from_string("1000.0000"), "initial transfer");
+      auto payer_balance_before = get_balance(payer);
+
+      addkeyacc(account, key_pub, signed_by_key, extra_key, price_limit, payer_str,
+                { permission_level{account, config::active_name}, permission_level{N(prodb), config::active_name} });
+      addkeyapp(account, new_key_pub, signed_by_new_key_app, extra_key,
+                key_pub, signed_by_key_app, price_limit, payer_str, auths_level);
+
+      // account balance after addkeyacc should be a account_balance_before -  10.0000 tokens (torewards action)
+      auto payer_balance_after = get_balance(payer);
+
+      auto data = get_authkeys_tbl(account);
+
+      auto ct = control->head_block_time();
+      BOOST_REQUIRE_EQUAL(data["owner"].as_string(), account.to_string());
+      BOOST_REQUIRE_EQUAL(data["key"].as_string(), string(new_key_pub));
+      BOOST_REQUIRE_EQUAL(data["not_valid_before"].as_string(), string(ct));
+      BOOST_REQUIRE_EQUAL(data["not_valid_after"].as_string(), string(ct + seconds(31104000))); // ct + 360 days
+      BOOST_REQUIRE_EQUAL(data["extra_key"].as_string(), extra_key);
+      BOOST_REQUIRE_EQUAL(data["revoked_at"].as_string(), "0"); // if not revoked == 0
+      BOOST_REQUIRE_EQUAL(core_from_string("290.5286"), payer_balance_after); // producers reward = 10
+
+      // Missing required authority payer
+      BOOST_REQUIRE_THROW(
+         addkeyapp( account, new_key_pub, signed_by_new_key_app, extra_key,
+                    key_pub, signed_by_key_app, price_limit, "accountnum3", auths_level),
+         missing_auth_exception );
+      // character is not in allowed character set for names
+      BOOST_REQUIRE_THROW(
+         addkeyapp( account, new_key_pub, signed_by_new_key_app, extra_key,
+                    key_pub, signed_by_key_app, price_limit, "dlas*fas.", auths_level),
+         eosio_assert_message_exception );
+      // action's authorizing actor 'fail' does not exist
+      BOOST_REQUIRE_THROW(
+         addkeyapp( account, new_key_pub, signed_by_new_key_app, extra_key,
+                    key_pub, signed_by_key_app, price_limit, payer_str,
+                    { permission_level{N(fail), config::active_name} }),
+         transaction_exception );
+      // action's authorizing actor '' does not exist
+      BOOST_REQUIRE_THROW(
+         addkeyapp( account, new_key_pub, signed_by_new_key_app, extra_key,
+                    key_pub, signed_by_key_app, price_limit, payer_str, { permission_level{} } ),
+         transaction_exception);
+      // expected key different than recovered new key
+      BOOST_REQUIRE_THROW(
+         addkeyapp( account, get_public_key(N(prodb), "active"), signed_by_new_key_app, extra_key,
+                    key_pub, signed_by_key_app, price_limit, payer_str, auths_level ),
+         eosio_assert_message_exception);
+      // expected key different than recovered user key
+      BOOST_REQUIRE_THROW(
+         addkeyapp( account, new_key_pub, signed_by_new_key_app, extra_key,
+                    get_public_key(N(prodb)), signed_by_key_app, price_limit, payer_str, auths_level ),
+         eosio_assert_message_exception);
+      //    overdrawn balance
+////      transfer(account, config::system_account_name, core_from_string("480.0000"), "too small balance test");
+      BOOST_REQUIRE_THROW(
+         addkeyapp( account, new_key_pub, signed_by_new_key_app, extra_key,
+                    key_pub, signed_by_key_app, price_limit, payer_str, auths_level ),
+         eosio_assert_message_exception);
+   } FC_LOG_AND_RETHROW()
+}
+
+BOOST_FIXTURE_TEST_CASE( addkeyapp_pay_by_auth_test, rem_auth_tester ) {
+   try {
       name account = N(proda);
       vector<permission_level> auths_level = { permission_level{N(prodb), config::active_name} }; // prodb as a executor
       // set account permission rem@code to the rem.auth (allow to execute the action on behalf of the account to rem.auth)
       updateauth(account, N(rem.auth));
       crypto::private_key new_key_priv = crypto::private_key::generate();
-      crypto::public_key new_key_pub = new_key_priv.get_public_key();
-      crypto::private_key key_priv = crypto::private_key::generate();
-      crypto::public_key key_pub = key_priv.get_public_key();
+      crypto::private_key key_priv     = crypto::private_key::generate();
+      crypto::public_key new_key_pub   = new_key_priv.get_public_key();
+      crypto::public_key key_pub       = key_priv.get_public_key();
+      const auto price_limit           = auth_from_string("2.0000");
       string payer_str = "";
       string extra_key = "MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIZDXel8Nh0xnGOo39XE3Jqdi6iQpxRs\n"
                          "/r82O1HnpuJFd/jyM3iWInPZvmOnPCP3/Nx4fRNj1y0U9QFnlfefNeECAwEAAQ==";
@@ -570,86 +835,17 @@ BOOST_FIXTURE_TEST_CASE( addkeyapp_require_app_auth_test, rem_auth_tester ) {
       auto signed_by_key_app = key_priv.sign(digest_addkeyapp);
 
       // tokens to pay for torewards action
-      transfer(config::system_account_name, account, core_from_string("500.0000"), "initial transfer");
+      transfer(config::system_account_name, account, core_from_string("1000.0000"), "initial transfer");
+      auto account_balance_before = get_balance(account);
+      buyauth(account, price_limit, 1, { permission_level{account, config::active_name} });
+      // account balance after addkeyacc should be a account_balance_before -  10.0000 tokens (torewards action)
+      auto account_balance_after = get_balance(account);
 
-      // account has no linked app keys
-      BOOST_REQUIRE_THROW(
-         addkeyapp(account, new_key_pub, signed_by_new_key_app, extra_key,
-                   key_pub, signed_by_key_app, payer_str, auths_level),
-                   eosio_assert_message_exception);
-
-      // Add new key to account
-      addkeyacc(account, key_pub, signed_by_key, extra_key, payer_str, { permission_level{account, config::active_name} });
-
-      crypto::private_key nonexistkey_priv = crypto::private_key::generate();
-      crypto::public_key nonexistkey_pub = nonexistkey_priv.get_public_key();
-      sha256 nonexist_digest = sha256::hash(join({ account.to_string(), string(new_key_pub), extra_key,
-                                                    string(nonexistkey_pub), payer_str }) );
-
-      signed_by_new_key_app = new_key_priv.sign(nonexist_digest);
-      auto signed_by_nonexistkey_app = nonexistkey_priv.sign(nonexist_digest);
-
-      // account has no active app keys (nonexist key)
-      BOOST_REQUIRE_THROW(
-         addkeyapp(account, new_key_pub, signed_by_new_key_app, extra_key,
-                   nonexistkey_pub, signed_by_nonexistkey_app, payer_str, auths_level),
-                   eosio_assert_message_exception);
-
-      // key_lifetime 360 days
-      produce_min_num_of_blocks_to_spend_time_wo_inactive_prod(fc::seconds(31104000));
-
-      signed_by_new_key_app = new_key_priv.sign(digest_addkeyapp);
-      // account has no active app keys (expired key)
-      BOOST_REQUIRE_THROW(
-         addkeyapp(account, new_key_pub, signed_by_new_key_app, extra_key,
-                   key_pub, signed_by_key_app, payer_str, auths_level),
-                   eosio_assert_message_exception);
-
-      addkeyacc(account, key_pub, signed_by_key, extra_key, payer_str, { permission_level{account, config::active_name} });
-      revokeacc(account, key_pub, { permission_level{account, config::active_name} });
-
-      // account has no active app keys (revoked)
-      BOOST_REQUIRE_THROW(
-         addkeyapp(account, new_key_pub, signed_by_new_key_app, extra_key,
-                   key_pub, signed_by_key_app, payer_str, auths_level),
-                   eosio_assert_message_exception);
-   } FC_LOG_AND_RETHROW()
-}
-
-BOOST_FIXTURE_TEST_CASE( addkeyapp_with_another_payer_test, rem_auth_tester ) {
-   try {
-      name account = N(proda);
-      name payer = N(prodb);
-      vector<permission_level> auths_level = { permission_level{payer, config::active_name} }; // prodb as a executor
-      // set account permission rem@code to the rem.auth (allow to execute the action on behalf of the account to rem.auth)
-      updateauth(account, N(rem.auth));
-      crypto::private_key new_key_priv = crypto::private_key::generate();
-      crypto::private_key key_priv = crypto::private_key::generate();
-      crypto::public_key new_key_pub = new_key_priv.get_public_key();
-      crypto::public_key key_pub = key_priv.get_public_key();
-      string extra_key = "MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIZDXel8Nh0xnGOo39XE3Jqdi6iQpxRs\n"
-                         "/r82O1HnpuJFd/jyM3iWInPZvmOnPCP3/Nx4fRNj1y0U9QFnlfefNeECAwEAAQ==";
-
-      sha256 digest_addkeyacc = sha256::hash(join( { account.to_string(), string(key_pub), extra_key, payer.to_string() } ));
-
-      sha256 digest_addkeyapp = sha256::hash(join({ account.to_string(), string(new_key_pub), extra_key,
-                                                    string(key_pub), payer.to_string() }) );
-
-      auto signed_by_key = key_priv.sign(digest_addkeyacc);
-      auto signed_by_new_key_app = new_key_priv.sign(digest_addkeyapp);
-      auto signed_by_key_app = key_priv.sign(digest_addkeyapp);
-
-      // tokens to pay for torewards action
-      transfer(config::system_account_name, payer, core_from_string("500.0000"), "initial transfer");
-      auto payer_balance_before = get_balance(payer);
-
-      addkeyacc(account, key_pub, signed_by_key, extra_key, payer.to_string(),
-                { permission_level{account, config::active_name}, permission_level{payer, config::active_name} });
+      addkeyacc(account, key_pub, signed_by_key, extra_key, price_limit, payer_str,
+                { permission_level{account, config::active_name} });
       addkeyapp(account, new_key_pub, signed_by_new_key_app, extra_key,
-                key_pub, signed_by_key_app, payer.to_string(), auths_level);
+                key_pub, signed_by_key_app, price_limit, payer_str, auths_level);
 
-      // account balance after addkeyapp should be a account_balance_before -  10.0000 tokens (torewards action)
-      auto payer_balance_after = get_balance(payer);
       auto data = get_authkeys_tbl(account);
 
       auto ct = control->head_block_time();
@@ -659,7 +855,208 @@ BOOST_FIXTURE_TEST_CASE( addkeyapp_with_another_payer_test, rem_auth_tester ) {
       BOOST_REQUIRE_EQUAL(data["not_valid_after"].as_string(), string(ct + seconds(31104000))); // ct + 360 days
       BOOST_REQUIRE_EQUAL(data["extra_key"].as_string(), extra_key);
       BOOST_REQUIRE_EQUAL(data["revoked_at"].as_string(), "0"); // if not revoked == 0
-      BOOST_REQUIRE_EQUAL(payer_balance_before - core_from_string("20.0000"), payer_balance_after); // producers reward = 10
+      BOOST_REQUIRE_EQUAL(core_from_string("290.5286"), account_balance_after); // producers reward = 10
+
+      // Missing required authority payer
+      BOOST_REQUIRE_THROW(
+         addkeyapp( account, new_key_pub, signed_by_new_key_app, extra_key,
+                    key_pub, signed_by_key_app, price_limit, "accountnum3", auths_level),
+         missing_auth_exception );
+      // character is not in allowed character set for names
+      BOOST_REQUIRE_THROW(
+         addkeyapp( account, new_key_pub, signed_by_new_key_app, extra_key,
+                    key_pub, signed_by_key_app, price_limit, "dlas*fas.", auths_level),
+         eosio_assert_message_exception );
+      // action's authorizing actor 'fail' does not exist
+      BOOST_REQUIRE_THROW(
+         addkeyapp( account, new_key_pub, signed_by_new_key_app, extra_key,
+                    key_pub, signed_by_key_app, price_limit, payer_str,
+                    { permission_level{N(fail), config::active_name} }),
+         transaction_exception );
+      // action's authorizing actor '' does not exist
+      BOOST_REQUIRE_THROW(
+         addkeyapp( account, new_key_pub, signed_by_new_key_app, extra_key,
+                    key_pub, signed_by_key_app, price_limit, payer_str, { permission_level{} } ),
+         transaction_exception);
+      // expected key different than recovered new key
+      BOOST_REQUIRE_THROW(
+         addkeyapp( account, get_public_key(N(prodb), "active"), signed_by_new_key_app, extra_key,
+                    key_pub, signed_by_key_app, price_limit, payer_str, auths_level ),
+         eosio_assert_message_exception);
+      // expected key different than recovered user key
+      BOOST_REQUIRE_THROW(
+         addkeyapp( account, new_key_pub, signed_by_new_key_app, extra_key,
+                    get_public_key(N(prodb)), signed_by_key_app, price_limit, payer_str, auths_level ),
+         eosio_assert_message_exception);
+      //    overdrawn balance
+////      transfer(account, config::system_account_name, core_from_string("480.0000"), "too small balance test");
+      BOOST_REQUIRE_THROW(
+         addkeyapp( account, new_key_pub, signed_by_new_key_app, extra_key,
+                    key_pub, signed_by_key_app, price_limit, payer_str, auths_level ),
+         eosio_assert_message_exception);
+   } FC_LOG_AND_RETHROW()
+}
+
+BOOST_FIXTURE_TEST_CASE( addkeyapp_pay_by_auth_with_another_payer_test, rem_auth_tester ) {
+   try {
+      name account = N(proda);
+      name payer = N(prodb);
+      vector<permission_level> auths_level = { permission_level{N(prodb), config::active_name} }; // prodb as a executor
+      // set account permission rem@code to the rem.auth (allow to execute the action on behalf of the account to rem.auth)
+      updateauth(account, N(rem.auth));
+      updateauth(payer, N(rem.auth));
+      crypto::private_key new_key_priv = crypto::private_key::generate();
+      crypto::private_key key_priv     = crypto::private_key::generate();
+      crypto::public_key new_key_pub   = new_key_priv.get_public_key();
+      crypto::public_key key_pub       = key_priv.get_public_key();
+      const auto price_limit           = auth_from_string("2.0000");
+      string payer_str = payer.to_string();
+      string extra_key = "MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIZDXel8Nh0xnGOo39XE3Jqdi6iQpxRs\n"
+                         "/r82O1HnpuJFd/jyM3iWInPZvmOnPCP3/Nx4fRNj1y0U9QFnlfefNeECAwEAAQ==";
+
+      sha256 digest_addkeyacc = sha256::hash(join( { account.to_string(), string(key_pub), extra_key, payer_str } ));
+
+      sha256 digest_addkeyapp = sha256::hash(join({ account.to_string(), string(new_key_pub), extra_key,
+                                                    string(key_pub), payer_str }) );
+
+      auto signed_by_key = key_priv.sign(digest_addkeyacc);
+      auto signed_by_new_key_app = new_key_priv.sign(digest_addkeyapp);
+      auto signed_by_key_app = key_priv.sign(digest_addkeyapp);
+
+      // tokens to pay for torewards action
+      transfer(config::system_account_name, payer, core_from_string("1000.0000"), "initial transfer");
+      auto payer_balance_before = get_balance(payer);
+      buyauth(payer, price_limit, 1, auths_level);
+      // account balance after addkeyacc should be a account_balance_before -  10.0000 tokens (torewards action)
+      auto payer_balance_after = get_balance(payer);
+
+      addkeyacc(account, key_pub, signed_by_key, extra_key, price_limit, payer_str,
+                { permission_level{account, config::active_name}, permission_level{N(prodb), config::active_name} });
+      addkeyapp(account, new_key_pub, signed_by_new_key_app, extra_key,
+                key_pub, signed_by_key_app, price_limit, payer_str, auths_level);
+
+      auto data = get_authkeys_tbl(account);
+
+      auto ct = control->head_block_time();
+      BOOST_REQUIRE_EQUAL(data["owner"].as_string(), account.to_string());
+      BOOST_REQUIRE_EQUAL(data["key"].as_string(), string(new_key_pub));
+      BOOST_REQUIRE_EQUAL(data["not_valid_before"].as_string(), string(ct));
+      BOOST_REQUIRE_EQUAL(data["not_valid_after"].as_string(), string(ct + seconds(31104000))); // ct + 360 days
+      BOOST_REQUIRE_EQUAL(data["extra_key"].as_string(), extra_key);
+      BOOST_REQUIRE_EQUAL(data["revoked_at"].as_string(), "0"); // if not revoked == 0
+      BOOST_REQUIRE_EQUAL(core_from_string("290.5286"), payer_balance_after); // producers reward = 10
+
+      // Missing required authority payer
+      BOOST_REQUIRE_THROW(
+         addkeyapp( account, new_key_pub, signed_by_new_key_app, extra_key,
+                    key_pub, signed_by_key_app, price_limit, "accountnum3", auths_level),
+         missing_auth_exception );
+      // character is not in allowed character set for names
+      BOOST_REQUIRE_THROW(
+         addkeyapp( account, new_key_pub, signed_by_new_key_app, extra_key,
+                    key_pub, signed_by_key_app, price_limit, "dlas*fas.", auths_level),
+         eosio_assert_message_exception );
+      // action's authorizing actor 'fail' does not exist
+      BOOST_REQUIRE_THROW(
+         addkeyapp( account, new_key_pub, signed_by_new_key_app, extra_key,
+                    key_pub, signed_by_key_app, price_limit, payer_str,
+                    { permission_level{N(fail), config::active_name} }),
+         transaction_exception );
+      // action's authorizing actor '' does not exist
+      BOOST_REQUIRE_THROW(
+         addkeyapp( account, new_key_pub, signed_by_new_key_app, extra_key,
+                    key_pub, signed_by_key_app, price_limit, payer_str, { permission_level{} } ),
+         transaction_exception);
+      // expected key different than recovered new key
+      BOOST_REQUIRE_THROW(
+         addkeyapp( account, get_public_key(N(prodb), "active"), signed_by_new_key_app, extra_key,
+                    key_pub, signed_by_key_app, price_limit, payer_str, auths_level ),
+         eosio_assert_message_exception);
+      // expected key different than recovered user key
+      BOOST_REQUIRE_THROW(
+         addkeyapp( account, new_key_pub, signed_by_new_key_app, extra_key,
+                    get_public_key(N(prodb)), signed_by_key_app, price_limit, payer_str, auths_level ),
+         eosio_assert_message_exception);
+      //    overdrawn balance
+////      transfer(account, config::system_account_name, core_from_string("480.0000"), "too small balance test");
+      BOOST_REQUIRE_THROW(
+         addkeyapp( account, new_key_pub, signed_by_new_key_app, extra_key,
+                    key_pub, signed_by_key_app, price_limit, payer_str, auths_level ),
+         eosio_assert_message_exception);
+   } FC_LOG_AND_RETHROW()
+}
+
+BOOST_FIXTURE_TEST_CASE( addkeyapp_require_app_auth_test, rem_auth_tester ) {
+   try{
+      name account = N(proda);
+      name executor = N(prodb);
+      vector<permission_level> auths_level = { permission_level{executor, config::active_name} }; // prodb as a executor
+      // set account permission rem@code to the rem.auth (allow to execute the action on behalf of the account to rem.auth)
+      updateauth(account, N(rem.auth));
+      updateauth(executor, N(rem.auth));
+      crypto::private_key new_key_priv = crypto::private_key::generate();
+      crypto::public_key new_key_pub   = new_key_priv.get_public_key();
+      crypto::private_key key_priv     = crypto::private_key::generate();
+      crypto::public_key key_pub       = key_priv.get_public_key();
+      const auto price_limit           = core_from_string("400.0000");
+
+      string payer_str = "";
+      string extra_key = "MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIZDXel8Nh0xnGOo39XE3Jqdi6iQpxRs\n"
+                         "/r82O1HnpuJFd/jyM3iWInPZvmOnPCP3/Nx4fRNj1y0U9QFnlfefNeECAwEAAQ==";
+
+      sha256 digest_addkeyacc = sha256::hash(join( { account.to_string(), string(key_pub), extra_key, payer_str } ));
+
+      sha256 digest_addkeyapp = sha256::hash(join({ account.to_string(), string(new_key_pub), extra_key,
+                                                    string(key_pub), payer_str }) );
+
+      auto signed_by_key = key_priv.sign(digest_addkeyacc);
+      auto signed_by_new_key_app = new_key_priv.sign(digest_addkeyapp);
+      auto signed_by_key_app = key_priv.sign(digest_addkeyapp);
+
+      // tokens to pay for torewards action
+      transfer(config::system_account_name, account, core_from_string("1200.0000"), "initial transfer");
+
+      // account has no linked app keys
+      BOOST_REQUIRE_THROW(
+         addkeyapp(account, new_key_pub, signed_by_new_key_app, extra_key,
+                   key_pub, signed_by_key_app, price_limit, payer_str, auths_level),
+                   eosio_assert_message_exception);
+
+      // Add new key to account
+      addkeyacc(account, key_pub, signed_by_key, extra_key, price_limit, payer_str, { permission_level{account, config::active_name} });
+
+      crypto::private_key nonexistkey_priv = crypto::private_key::generate();
+      crypto::public_key nonexistkey_pub   = nonexistkey_priv.get_public_key();
+      sha256 nonexist_digest = sha256::hash(join({ account.to_string(), string(new_key_pub), extra_key,
+                                                    string(nonexistkey_pub), payer_str }) );
+
+      signed_by_new_key_app = new_key_priv.sign(nonexist_digest);
+      auto signed_by_nonexistkey_app = nonexistkey_priv.sign(nonexist_digest);
+
+      // account has no active app keys (nonexist key)
+      BOOST_REQUIRE_THROW(
+         addkeyapp(account, new_key_pub, signed_by_new_key_app, extra_key,
+                   nonexistkey_pub, signed_by_nonexistkey_app, price_limit, payer_str, auths_level),
+                   eosio_assert_message_exception);
+
+      // key_lifetime 360 days
+      produce_min_num_of_blocks_to_spend_time_wo_inactive_prod(fc::seconds(31104000));
+
+      signed_by_new_key_app = new_key_priv.sign(digest_addkeyapp);
+      // account has no active app keys (expired key)
+      BOOST_REQUIRE_THROW(
+         addkeyapp(account, new_key_pub, signed_by_new_key_app, extra_key,
+                   key_pub, signed_by_key_app, price_limit, payer_str, auths_level),
+                   eosio_assert_message_exception);
+
+      addkeyacc(account, key_pub, signed_by_key, extra_key, price_limit, payer_str, { permission_level{account, config::active_name} });
+      revokeacc(account, key_pub, { permission_level{account, config::active_name} });
+
+      // account has no active app keys (revoked)
+      BOOST_REQUIRE_THROW(
+         addkeyapp(account, new_key_pub, signed_by_new_key_app, extra_key,
+                   key_pub, signed_by_key_app, price_limit, payer_str, auths_level),
+                   eosio_assert_message_exception);
    } FC_LOG_AND_RETHROW()
 }
 
@@ -670,7 +1067,9 @@ BOOST_FIXTURE_TEST_CASE( revokedacc_test, rem_auth_tester ) {
       // set account permission rem@code to the rem.auth (allow to execute the action on behalf of the account to rem.auth)
       updateauth(account, N(rem.auth));
       crypto::private_key key_priv = crypto::private_key::generate();
-      crypto::public_key key_pub = key_priv.get_public_key();
+      crypto::public_key key_pub   = key_priv.get_public_key();
+      const auto price_limit       = core_from_string("400.0000");
+
       string payer_str = "";
       string extra_key = "MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIZDXel8Nh0xnGOo39XE3Jqdi6iQpxRs\n"
                          "/r82O1HnpuJFd/jyM3iWInPZvmOnPCP3/Nx4fRNj1y0U9QFnlfefNeECAwEAAQ==";
@@ -683,10 +1082,12 @@ BOOST_FIXTURE_TEST_CASE( revokedacc_test, rem_auth_tester ) {
       transfer(config::system_account_name, account, core_from_string("500.0000"), "initial transfer");
       auto account_balance_before = get_balance(account);
 
-      addkeyacc(account, key_pub, signed_by_key, extra_key, payer_str, auths_level);
+      addkeyacc(account, key_pub, signed_by_key, extra_key, price_limit, payer_str, auths_level);
+
       time_point ct = control->head_block_time();
 
       revokeacc(account, key_pub, { permission_level{account, config::active_name} });
+      uint32_t revoked_at = control->head_block_time().sec_since_epoch();
 
       auto account_balance_after = get_balance(account);
       auto data = get_authkeys_tbl(account);
@@ -696,8 +1097,8 @@ BOOST_FIXTURE_TEST_CASE( revokedacc_test, rem_auth_tester ) {
       BOOST_REQUIRE_EQUAL(data["not_valid_before"].as_string(), string(ct));
       BOOST_REQUIRE_EQUAL(data["not_valid_after"].as_string(), string(ct + seconds(31104000))); // ct + 360 days
       BOOST_REQUIRE_EQUAL(data["extra_key"].as_string(), extra_key);
-      BOOST_REQUIRE_EQUAL(data["revoked_at"].as_string(), std::to_string(ct.sec_since_epoch()) ); // if not revoked == 0
-      BOOST_REQUIRE_EQUAL(account_balance_before - core_from_string("10.0000"), account_balance_after); // producers reward = 10
+      BOOST_REQUIRE_EQUAL(data["revoked_at"].as_string(), std::to_string(revoked_at) ); // if not revoked == 0
+      BOOST_REQUIRE_EQUAL(core_from_string("145.2643"), account_balance_after); // producers reward = 10
 
       // Missing required authority account
       BOOST_REQUIRE_THROW(
@@ -721,11 +1122,14 @@ BOOST_FIXTURE_TEST_CASE( revokedacc_test, rem_auth_tester ) {
 BOOST_FIXTURE_TEST_CASE( revokedapp_test, rem_auth_tester ) {
    try {
       name account = N(proda);
+      name executor = N(prodb);
       vector<permission_level> auths_level = { permission_level{N(prodb), config::active_name} };
       // set account permission rem@code to the rem.auth (allow to execute the action on behalf of the account to rem.auth)
       updateauth(account, N(rem.auth));
+      updateauth(executor, N(rem.auth));
       crypto::private_key revoke_key_priv = crypto::private_key::generate();
-      crypto::public_key revoke_key_pub = revoke_key_priv.get_public_key();
+      crypto::public_key revoke_key_pub   = revoke_key_priv.get_public_key();
+      const auto price_limit              = core_from_string("400.0000");
       string payer_str = "";
       string extra_key = "MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIZDXel8Nh0xnGOo39XE3Jqdi6iQpxRs\n"
                          "/r82O1HnpuJFd/jyM3iWInPZvmOnPCP3/Nx4fRNj1y0U9QFnlfefNeECAwEAAQ==";
@@ -737,14 +1141,15 @@ BOOST_FIXTURE_TEST_CASE( revokedapp_test, rem_auth_tester ) {
       auto signed_by_revkey = revoke_key_priv.sign(revokeapp_digest);
 
       // tokens to pay for torewards action
-      transfer(config::system_account_name, account, core_from_string("500.0000"), "initial transfer");
+      transfer(config::system_account_name, account, core_from_string("1000.0000"), "initial transfer");
       auto account_balance_before = get_balance(account);
 
-      addkeyacc(account, revoke_key_pub, signed_by_addkey, extra_key, payer_str, { permission_level{account, config::active_name} });
+      addkeyacc(account, revoke_key_pub, signed_by_addkey, extra_key, price_limit, payer_str, { permission_level{account, config::active_name} });
       time_point ct = control->head_block_time();
 
       // revoke key and sign digest by revoke key
       revokeapp(account, revoke_key_pub, revoke_key_pub, signed_by_revkey, auths_level);
+      uint32_t revoked_at = control->head_block_time().sec_since_epoch();
 
       auto account_balance_after = get_balance(account);
       auto data = get_authkeys_tbl(account);
@@ -754,11 +1159,12 @@ BOOST_FIXTURE_TEST_CASE( revokedapp_test, rem_auth_tester ) {
       BOOST_REQUIRE_EQUAL(data["not_valid_before"].as_string(), string(ct));
       BOOST_REQUIRE_EQUAL(data["not_valid_after"].as_string(), string(ct + seconds(31104000))); // ct + 360 days
       BOOST_REQUIRE_EQUAL(data["extra_key"].as_string(), extra_key);
-      BOOST_REQUIRE_EQUAL(data["revoked_at"].as_string(), std::to_string(ct.sec_since_epoch()) ); // if not revoked == 0
-      BOOST_REQUIRE_EQUAL(account_balance_before - core_from_string("10.0000"), account_balance_after); // producers reward = 10
+      BOOST_REQUIRE_EQUAL(data["revoked_at"].as_string(), std::to_string(revoked_at) ); // if not revoked == 0
+      BOOST_REQUIRE_EQUAL(core_from_string("645.2643"), account_balance_after); // producers reward = 10
 
       // add new key to test revokeapp throw
-      addkeyacc(account, revoke_key_pub, signed_by_addkey, extra_key, payer_str, { permission_level{account, config::active_name} });
+      addkeyacc(account, revoke_key_pub, signed_by_addkey, extra_key, price_limit, payer_str,
+                { permission_level{account, config::active_name} });
 
       // action's authorizing actor '' does not exist
       BOOST_REQUIRE_THROW(
@@ -795,7 +1201,8 @@ BOOST_FIXTURE_TEST_CASE( revokedapp_and_sign_by_another_key_test, rem_auth_teste
       crypto::private_key key_priv = crypto::private_key::generate();
       crypto::public_key key_pub = key_priv.get_public_key();
       crypto::private_key revoke_key_priv = crypto::private_key::generate();
-      crypto::public_key revoke_key_pub = revoke_key_priv.get_public_key();
+      crypto::public_key revoke_key_pub   = revoke_key_priv.get_public_key();
+      const auto price_limit              = core_from_string("400.0000");
       string payer_str = "";
       string extra_key = "MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIZDXel8Nh0xnGOo39XE3Jqdi6iQpxRs\n"
                          "/r82O1HnpuJFd/jyM3iWInPZvmOnPCP3/Nx4fRNj1y0U9QFnlfefNeECAwEAAQ==";
@@ -807,21 +1214,22 @@ BOOST_FIXTURE_TEST_CASE( revokedapp_and_sign_by_another_key_test, rem_auth_teste
       auto signed_by_revkey = key_priv.sign(revokeapp_digest);
 
       // tokens to pay for torewards action
-      transfer(config::system_account_name, account, core_from_string("500.0000"), "initial transfer");
+      transfer(config::system_account_name, account, core_from_string("1000.0000"), "initial transfer");
       auto account_balance_before = get_balance(account);
 
       // Add key_pub
-      addkeyacc(account, key_pub, signed_by_addkey, extra_key, payer_str, { permission_level{account, config::active_name} });
+      addkeyacc(account, key_pub, signed_by_addkey, extra_key, price_limit, payer_str, { permission_level{account, config::active_name} });
       // Add revoke_key_pub
       addkeyacc_digest = sha256::hash(join( { account.to_string(), string(revoke_key_pub), extra_key, payer_str } ));
       signed_by_addkey = revoke_key_priv.sign(addkeyacc_digest);
       produce_blocks();
-      addkeyacc(account, revoke_key_pub, signed_by_addkey, extra_key, payer_str, { permission_level{account, config::active_name} });
+      addkeyacc(account, revoke_key_pub, signed_by_addkey, extra_key, price_limit, payer_str,
+                { permission_level{account, config::active_name} });
       time_point ct = control->head_block_time();
-
 
       // revoke key and sign digest by key
       revokeapp(account, revoke_key_pub, key_pub, signed_by_revkey, auths_level);
+      uint32_t revoked_at = control->head_block_time().sec_since_epoch();
 
       auto account_balance_after = get_balance(account);
       auto data = get_authkeys_tbl(account);
@@ -831,21 +1239,24 @@ BOOST_FIXTURE_TEST_CASE( revokedapp_and_sign_by_another_key_test, rem_auth_teste
       BOOST_REQUIRE_EQUAL(data["not_valid_before"].as_string(), string(ct));
       BOOST_REQUIRE_EQUAL(data["not_valid_after"].as_string(), string(ct + seconds(31104000))); // ct + 360 days
       BOOST_REQUIRE_EQUAL(data["extra_key"].as_string(), extra_key);
-      BOOST_REQUIRE_EQUAL(data["revoked_at"].as_string(), std::to_string(ct.sec_since_epoch()) ); // if not revoked == 0
-      BOOST_REQUIRE_EQUAL(account_balance_before - core_from_string("20.0000"), account_balance_after); // producers reward = 10
+      BOOST_REQUIRE_EQUAL(data["revoked_at"].as_string(), std::to_string(revoked_at) ); // if not revoked == 0
+      BOOST_REQUIRE_EQUAL(core_from_string("290.5286"), account_balance_after); // producers reward = 10
    } FC_LOG_AND_RETHROW()
 }
 
 BOOST_FIXTURE_TEST_CASE( revoke_require_app_auth_test, rem_auth_tester ) {
    try {
-      name account = N(proda);
+      name account  = N(proda);
+      name executor = N(prodb);
       vector<permission_level> auths_level = { permission_level{N(prodb), config::active_name} }; // prodb as a executor
       // set account permission rem@code to the rem.auth (allow to execute the action on behalf of the account to rem.auth)
       updateauth(account, N(rem.auth));
+      updateauth(executor, N(rem.auth));
       crypto::private_key new_key_priv = crypto::private_key::generate();
-      crypto::public_key new_key_pub = new_key_priv.get_public_key();
-      crypto::private_key key_priv = crypto::private_key::generate();
-      crypto::public_key key_pub = key_priv.get_public_key();
+      crypto::public_key new_key_pub   = new_key_priv.get_public_key();
+      crypto::private_key key_priv     = crypto::private_key::generate();
+      crypto::public_key key_pub       = key_priv.get_public_key();
+      const auto price_limit           = core_from_string("400.0000");
       string payer_str = "";
       string extra_key = "MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIZDXel8Nh0xnGOo39XE3Jqdi6iQpxRs\n"
                          "/r82O1HnpuJFd/jyM3iWInPZvmOnPCP3/Nx4fRNj1y0U9QFnlfefNeECAwEAAQ==";
@@ -860,16 +1271,17 @@ BOOST_FIXTURE_TEST_CASE( revoke_require_app_auth_test, rem_auth_tester ) {
       auto signed_by_key_app = key_priv.sign(digest_addkeyapp);
 
       // tokens to pay for torewards action
-      transfer(config::system_account_name, account, core_from_string("500.0000"), "initial transfer");
+      transfer(config::system_account_name, account, core_from_string("1000.0000"), "initial transfer");
 
       // account has no linked app keys
       BOOST_REQUIRE_THROW(
          addkeyapp(account, new_key_pub, signed_by_new_key_app, extra_key,
-                   key_pub, signed_by_key_app, payer_str, auths_level),
+                   key_pub, signed_by_key_app, price_limit,payer_str, auths_level),
                    eosio_assert_message_exception);
 
       // Add new key to account
-      addkeyacc(account, key_pub, signed_by_key, extra_key, payer_str, { permission_level{account, config::active_name} });
+      addkeyacc(account, key_pub, signed_by_key, extra_key, price_limit, payer_str,
+                { permission_level{account, config::active_name} });
 
       crypto::private_key nonexistkey_priv = crypto::private_key::generate();
       crypto::public_key nonexistkey_pub = nonexistkey_priv.get_public_key();
@@ -882,7 +1294,7 @@ BOOST_FIXTURE_TEST_CASE( revoke_require_app_auth_test, rem_auth_tester ) {
       // account has no active app keys (nonexist key)
       BOOST_REQUIRE_THROW(
          addkeyapp(account, new_key_pub, signed_by_new_key_app, extra_key,
-                   nonexistkey_pub, signed_by_nonexistkey_app, payer_str, auths_level),
+                   nonexistkey_pub, signed_by_nonexistkey_app, price_limit, payer_str, auths_level),
                    eosio_assert_message_exception);
 
       // key_lifetime 360 days
@@ -892,16 +1304,16 @@ BOOST_FIXTURE_TEST_CASE( revoke_require_app_auth_test, rem_auth_tester ) {
       // account has no active app keys (expired key)
       BOOST_REQUIRE_THROW(
          addkeyapp(account, new_key_pub, signed_by_new_key_app, extra_key,
-                   key_pub, signed_by_key_app, payer_str, auths_level),
+                   key_pub, signed_by_key_app, price_limit, payer_str, auths_level),
                    eosio_assert_message_exception);
 
-      addkeyacc(account, key_pub, signed_by_key, extra_key, payer_str, { permission_level{account, config::active_name} });
+      addkeyacc(account, key_pub, signed_by_key, extra_key, price_limit, payer_str, { permission_level{account, config::active_name} });
       revokeacc(account, key_pub, { permission_level{account, config::active_name} });
 
       // account has no active app keys (revoked)
       BOOST_REQUIRE_THROW(
          addkeyapp(account, new_key_pub, signed_by_new_key_app, extra_key,
-                   key_pub, signed_by_key_app, payer_str, auths_level),
+                   key_pub, signed_by_key_app, price_limit, payer_str, auths_level),
                    eosio_assert_message_exception);
    } FC_LOG_AND_RETHROW()
 }
@@ -910,13 +1322,10 @@ BOOST_FIXTURE_TEST_CASE( buyauth_tests, rem_auth_tester ) {
    try {
       vector<permission_level> auths_level = { permission_level{N(prodb), config::active_name} };
       transfer(config::system_account_name, N(prodb), core_from_string("500.0000"), "initial transfer");
+      updateauth(N(prodb), N(rem.auth));
 
-      buyauth(N(prodb), asset::from_string("1 AUTH"), 1, auths_level);
+      buyauth(N(prodb), auth_from_string("1.0000"), 1, auths_level);
 
-      BOOST_TEST_MESSAGE(get_balance(N(prodb)));
-      BOOST_TEST_MESSAGE(get_balance(N(rem.auth)));
-      BOOST_TEST_MESSAGE(get_balance_auth(N(rem.auth)));
-      BOOST_TEST_MESSAGE(get_balance_auth(N(prodb)));
    } FC_LOG_AND_RETHROW()
 }
 

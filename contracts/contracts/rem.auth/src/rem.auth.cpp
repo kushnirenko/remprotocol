@@ -11,23 +11,6 @@ namespace eosio {
 
    using eosiosystem::system_contract;
 
-   void auth::buyauth(const name &account, const asset &quantity, const double &max_price) {
-      require_auth(account);
-      check(quantity.is_valid(), "invalid quantity");
-      check(quantity.amount > 0, "quantity should be a positive value");
-      check(quantity.symbol == auth_symbol, "symbol precision mismatch");
-
-//      double remusd = get_remusd_price(); // TODO: implement method get_remusd_price from oracle table remusd
-      double remusd = 0.002819;
-
-      check(max_price > remusd, "currently rem-usd price is above maximum price");
-      asset purchase_fee = get_authrem_price(quantity);
-
-      transfer_tokens(account, _self, purchase_fee, "purchase fee AUTH tokens");
-      issue_tokens(quantity);
-      transfer_tokens(_self, account, quantity, "buying an auth token");
-   }
-
    void auth::addkeyacc(const name &account, const string &key_str, const signature &signed_by_key,
                         const string &extra_key, const asset &price_limit, const string &payer_str) {
 
@@ -52,26 +35,6 @@ namespace eosio {
       sub_storage_fee(payer, price_limit);
    }
 
-   auto auth::get_authkey_it(const name &account, const public_key &key) {
-      auto authkeys_idx = authkeys_tbl.get_index<"byname"_n>();
-      auto it = authkeys_idx.find(account.value);
-
-      for(; it != authkeys_idx.end(); ++it) {
-         auto ct = current_time_point();
-
-         bool is_before_time_valid = ct > it->not_valid_before.to_time_point();
-         bool is_after_time_valid = ct < it->not_valid_after.to_time_point();
-         bool is_revoked = it->revoked_at;
-
-         if (!is_before_time_valid || !is_after_time_valid || is_revoked) {
-            continue;
-         } else if (it->key == key) {
-            break;
-         }
-      }
-      return it;
-   }
-
    void auth::addkeyapp(const name &account, const string &new_key_str, const signature &signed_by_new_key,
                         const string &extra_key, const string &key_str, const signature &signed_by_key,
                         const asset &price_limit, const string &payer_str) {
@@ -92,7 +55,7 @@ namespace eosio {
       authkeys_tbl.emplace(_self, [&](auto &k) {
          k.N = authkeys_tbl.available_primary_key();
          k.owner = account;
-         k.key = key;
+         k.key = new_key;
          k.extra_key = extra_key;
          k.not_valid_before = current_time_point();
          k.not_valid_after = current_time_point() + key_lifetime;
@@ -135,6 +98,23 @@ namespace eosio {
       transfer_tokens(from, to, quantity, string("authentication app transfer"));
    }
 
+   void auth::buyauth(const name &account, const asset &quantity, const double &max_price) {
+      require_auth(account);
+      check(quantity.is_valid(), "invalid quantity");
+      check(quantity.amount > 0, "quantity should be a positive value");
+      check(quantity.symbol == auth_symbol, "symbol precision mismatch");
+
+//      double remusd = get_remusd_price(); // TODO: implement method get_remusd_price from oracle table remusd
+      double remusd = 0.002819;
+
+      check(max_price > remusd, "currently rem-usd price is above maximum price");
+      asset purchase_fee = get_authrem_price(quantity);
+
+      transfer_tokens(account, _self, purchase_fee, "purchase fee AUTH tokens");
+      issue_tokens(quantity);
+      transfer_tokens(_self, account, quantity, "buying an auth token");
+   }
+
    void auth::cleartable( ) {
       require_auth(_self);
       for (auto _table_itr = authkeys_tbl.begin(); _table_itr != authkeys_tbl.end();) {
@@ -155,8 +135,7 @@ namespace eosio {
       asset buyauth_unit_price{0, auth_symbol};
 
       asset auth_credit_supply = token::get_supply(system_contract::token_account, auth_symbol.code());
-      asset rem_balance = token::get_balance(system_contract::token_account, _self,
-                                             system_contract::get_core_symbol().code());
+      asset rem_balance = get_balance(system_contract::token_account, _self, system_contract::get_core_symbol());
 
       if (is_pay_by_rem) {
          authrem_price = get_authrem_price(key_store_price);
@@ -173,6 +152,26 @@ namespace eosio {
          double(auth_credit_supply.amount + buyauth_unit_price.amount);
 
       to_rewards(_self, asset{static_cast<int64_t>(reward_amount * 10000), system_contract::get_core_symbol()});
+   }
+
+   auto auth::get_authkey_it(const name &account, const public_key &key) {
+      auto authkeys_idx = authkeys_tbl.get_index<"byname"_n>();
+      auto it = authkeys_idx.find(account.value);
+
+      for(; it != authkeys_idx.end(); ++it) {
+         auto ct = current_time_point();
+
+         bool is_before_time_valid = ct > it->not_valid_before.to_time_point();
+         bool is_after_time_valid = ct < it->not_valid_after.to_time_point();
+         bool is_revoked = it->revoked_at;
+
+         if (!is_before_time_valid || !is_after_time_valid || is_revoked) {
+            continue;
+         } else if (it->key == key) {
+            break;
+         }
+      }
+      return it;
    }
 
    void auth::revoke_key(const name &account, const public_key &key) {
