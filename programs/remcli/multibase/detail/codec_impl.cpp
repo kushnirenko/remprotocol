@@ -42,8 +42,7 @@ std::size_t codec::impl::encode(std::string_view input, std::string& output,
   if (output.size() < size) throw std::out_of_range("Output buffer too small");
   std::string tmp(basic_size, 0);
   const auto ret = encode(input, tmp, impl_tag{});
-  write_encoding(output, include_encoding);
-  std::copy(std::begin(tmp), std::end(tmp), std::begin(output) + encoding_size(include_encoding));
+  std::copy(std::begin(tmp), std::end(tmp), std::begin(output) + write_encoding(output, include_encoding));
   return ret;
 }
 

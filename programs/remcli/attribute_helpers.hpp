@@ -42,7 +42,32 @@ std::string decodeAttribute(const std::string& hex, int32_t type)
          v = fc::time_point(fc::seconds(fc::raw::unpack<int64_t>(data)));
          break;
       case 6:
-         v = data;
+         if (data.size() == 34 && data[0] == 18 && data[1] == 32) {
+            auto codec = multibase::base_58_btc{};
+            auto view = std::string_view(data.data(), data.size());
+            auto encoded = codec.encode(view, false);
+            v = encoded;
+         }
+         else {
+            int64_t varint = 0;
+            if (static_cast<unsigned char>(data[0]) <= 252) {
+               varint = static_cast<unsigned char>(data[0]);
+            }
+            else {
+               size_t size = static_cast<unsigned char>(data[0]) - 252;
+               for (int i = 0; i < size; i++) {
+                  varint <<= 8;
+                  varint &= static_cast<unsigned char>(data[i + 1]);
+               }
+
+            }
+            if (varint == 1) {
+               auto codec = multibase::base_58_btc{};
+               auto view = std::string_view(data.data(), data.size());
+               auto encoded = codec.encode(view, true);
+               v = encoded;
+            }
+         }
          break;
       case 7:
          v = fc::raw::unpack<std::string>(data);
