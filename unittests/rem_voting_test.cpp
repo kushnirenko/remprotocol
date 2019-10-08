@@ -741,11 +741,11 @@ BOOST_FIXTURE_TEST_CASE( rem_delegated_vote_weight_test, voting_tester ) {
          }
 
          const auto remvoter1 = get_voter_info( "remvoter1" );
-         BOOST_TEST_REQUIRE( 200'0000 == remvoter1["staked"].as_int64() );
+         BOOST_TEST_REQUIRE( 100'0000 == remvoter1["staked"].as_int64() );
 
          const auto remvoter2 = get_voter_info( "remvoter2" );
          BOOST_TEST_REQUIRE( 100'0000 == remvoter2["staked"].as_int64() );
-         BOOST_TEST_REQUIRE( remvoter1["last_vote_weight"].as_double() / 2.0 == remvoter2["last_vote_weight"].as_double() );
+         BOOST_TEST_REQUIRE( remvoter1["last_vote_weight"].as_double() == remvoter2["last_vote_weight"].as_double() );
       }
 
       // undelegate delegated without transfer tokens shouldn't update staked or votepower
@@ -771,7 +771,7 @@ BOOST_FIXTURE_TEST_CASE( rem_delegated_vote_weight_test, voting_tester ) {
          const auto remvoter2 = get_voter_info( "remvoter2" );
          BOOST_TEST_REQUIRE( remvoter1["staked"].as_int64() == remvoter2["staked"].as_int64() );
          BOOST_TEST_REQUIRE( remvoter1["last_vote_weight"].as_double() == remvoter2["last_vote_weight"].as_double() );
-         BOOST_TEST_REQUIRE( 2.0 * proda_votes_before_undelegate / 3.0 == get_producer_info( "proda" )["total_votes"].as_double() );
+         BOOST_TEST_REQUIRE( proda_votes_before_undelegate == get_producer_info( "proda" )["total_votes"].as_double() );
       }
 
 

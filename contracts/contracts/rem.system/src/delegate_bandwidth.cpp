@@ -241,7 +241,9 @@ namespace eosiosystem {
       }
 
       vote_stake_updater( from );
-      update_voting_power( from, stake_delta );
+      if ( transfer || source_stake_from == receiver ) {
+         update_voting_power( from, stake_delta );
+      }
    }
 
    void system_contract::update_voting_power( const name& voter, const asset& total_update )
