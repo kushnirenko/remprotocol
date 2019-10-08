@@ -752,7 +752,6 @@ BOOST_FIXTURE_TEST_CASE( rem_delegated_vote_weight_test, voting_tester ) {
       // undelegated tokens returns to unstaking state and after 72 hours to liquid state
       // then we have to call refund action to return money to balance
       // expected remvoter1.last_vote_weight to be the same as remvoter2.last_vote_weight
-      // expected proda lost 1/3 of total votes
       {
          const auto proda_votes_before_undelegate = get_producer_info( "proda" )["total_votes"].as_double();
 
