@@ -11,6 +11,76 @@
 #include <multibase/multibase.h>
 
 
+std::vector<char> encodeOID(const std::string& str)
+{
+   std::vector<char> bytes;
+   std::vector<uint64_t> values;
+   std::istringstream stream(str);
+   do {
+      uint64_t v = 0;
+      stream >> v;
+      const auto ch = stream.get();
+      EOS_ASSERT( ch == '.' || ch == decltype(stream)::traits_type::eof(), eosio::chain::invalid_oid_encoding, "Invalid OID encoding" );
+      values.push_back(v);
+   } while(stream);
+
+   EOS_ASSERT( values.size() >= 1, eosio::chain::invalid_oid_encoding, "Invalid OID encoding" );
+   bytes.emplace_back(values[0] * 40 + values[1]);
+   for (size_t i = 2; i < values.size(); i++) {
+      const auto value = values[i];
+      if (value <= 127) {
+         bytes.push_back(static_cast<unsigned char>(value));
+      }
+      else {
+         std::vector<char> value7BitBytesReversed;
+         //for every 7 bits of value create byte with 7th bit set
+         constexpr size_t sevenBitChunks = sizeof(value) / 7 + 1;
+         for (size_t j = 0; j < sevenBitChunks; j++) {
+            value7BitBytesReversed.push_back(static_cast<unsigned char>(value >> (7 * j)) | 0b10000000); //set bit 7
+         }
+         const auto lastNonZeroIt = std::find_if(std::rbegin(value7BitBytesReversed), std::rend(value7BitBytesReversed),
+                                                 [](const auto& v) { return v & 0b01111111; });
+         const auto excessBytes = std::distance(std::rbegin(value7BitBytesReversed), lastNonZeroIt);
+         value7BitBytesReversed.resize(value7BitBytesReversed.size() - excessBytes);
+         value7BitBytesReversed.front() &= 0b01111111; //drop bit 7 for last byte
+         std::copy(std::rbegin(value7BitBytesReversed), std::rend(value7BitBytesReversed), std::back_inserter<std::vector<char>>(bytes));
+      }
+   }
+   return bytes;
+}
+
+
+std::string decodeOID(const std::vector<char>& bytes)
+{
+   if (bytes.empty()) {
+      return "";
+   }
+   //7th bit of last byte must be 0
+   EOS_ASSERT( !(bytes.back() & 0b10000000), eosio::chain::invalid_oid_encoding, "Invalid OID encoding" );
+
+   std::vector<uint64_t> values;
+   values.push_back(static_cast<uint64_t>(static_cast<unsigned char>(bytes.front())) / 40);
+   values.push_back(static_cast<uint64_t>(static_cast<unsigned char>(bytes.front())) % 40);
+   size_t i = 1;
+   while (i < bytes.size()) {
+      char byte = bytes[i];
+      uint64_t value = static_cast<unsigned char>(byte) & 0b01111111;
+      while (byte & 0b10000000) {
+         i++;
+         byte = bytes[i];
+         value <<= 7;
+         value |= byte & 0b01111111;
+      }
+      values.push_back(value);
+      i++;
+   }
+   std::string result;
+   std::for_each(std::begin(values), std::prev(std::end(values)), [&](const auto& v) { result += std::to_string(v) + '.'; });
+   result += std::to_string(values.back());
+   return result;
+}
+
+
 std::string decodeAttribute(const std::string& hex, int32_t type)
 {
    if (hex.empty()) {
@@ -70,7 +140,7 @@ std::string decodeAttribute(const std::string& hex, int32_t type)
          }
          break;
       case 7:
-         v = fc::raw::unpack<std::string>(data);
+         v = decodeOID(data);
          break;
       case 8:
          v = data;
@@ -149,7 +219,7 @@ std::vector<char> encodeAttribute(const std::string& json, int32_t type)
    else if (type == 7) {
       std::string s;
       fc::from_variant(v, s);
-      bytes = fc::raw::pack(s);
+      bytes = encodeOID(s);
    }
    else if (type == 8) {
       std::vector<char> vec;

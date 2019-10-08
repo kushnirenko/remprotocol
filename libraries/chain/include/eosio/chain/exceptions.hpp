@@ -377,6 +377,8 @@ namespace eosio { namespace chain {
                                     3100011, "Unknown attribute type detected" )
       FC_DECLARE_DERIVED_EXCEPTION( invalid_cid_encoding,                   misc_exception,
                                     3100012, "Invalid CID encoding detected" )
+      FC_DECLARE_DERIVED_EXCEPTION( invalid_oid_encoding,                   misc_exception,
+                                    3100013, "Invalid OID encoding detected" )
 
 
 
