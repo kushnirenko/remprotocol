@@ -37,7 +37,7 @@ echo "class Remprotocol < Formula
 
    homepage \"${URL}\"
    revision 0
-   url \"https://github.com/RemmeAuth/remprotocol/archive/${VERSION}.tar.gz\"
+   url \"https://github.com/kushnirenko/remprotocol/archive/${VERSION}.tar.gz\"
    version \"${VERSION}\"
 
    option :universal
@@ -50,7 +50,7 @@ echo "class Remprotocol < Formula
    depends_on :arch =>  :intel
 
    bottle do
-      root_url \"https://github.com/RemmeAuth/remprotocol/releases/download/${VERSION}\"
+      root_url \"https://github.com/kushnirenko/remprotocol/releases/download/${VERSION}\"
       sha256 \"${hash}\" => :${MAC_VERSION}
    end
    def install
