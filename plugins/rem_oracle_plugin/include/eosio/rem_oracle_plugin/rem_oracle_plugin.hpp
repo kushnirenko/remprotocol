@@ -16,7 +16,7 @@ const char* cryptocompare_host = "min-api.cryptocompare.com";
 const char* cryptocompare_endpoint = "/data/price";
 const char* cryptocompare_params = "?fsym=REM&tsyms=USD&apikey=";
 
-uint32_t update_price_period = 5;  // seconds
+uint32_t update_price_period = 3600;  // seconds
 
 struct set_price_data {
     double price;
