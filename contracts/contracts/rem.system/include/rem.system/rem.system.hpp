@@ -135,8 +135,6 @@ namespace eosiosystem {
       uint64_t             min_account_stake = 1000000; //minimum stake for new created account 100'0000 REM
       uint64_t             total_ram_bytes_reserved = 0;
       int64_t              total_ram_stake = 0;
-      microseconds         stake_lock_period = eosio::days(180);
-      microseconds         stake_unlock_period = eosio::days(180);
       //producer name and pervote factor
       std::vector<std::pair<eosio::name, double>> last_schedule;
       uint32_t last_schedule_version = 0;
@@ -158,12 +156,11 @@ namespace eosiosystem {
 
       // explicit serialization macro is not necessary, used here only to improve compilation time
       EOSLIB_SERIALIZE_DERIVED( eosio_global_state, eosio::blockchain_parameters, (max_ram_size)(min_account_stake)
-                                (total_ram_bytes_reserved)(total_ram_stake)(stake_lock_period)(stake_unlock_period)
-                                (last_schedule)(last_schedule_version)(current_round_start_time)
-                                (last_producer_schedule_update)(last_pervote_bucket_fill)
+                                (total_ram_bytes_reserved)(total_ram_stake)(last_schedule)(last_schedule_version)
+                                (current_round_start_time) (last_producer_schedule_update)(last_pervote_bucket_fill)
                                 (perstake_bucket)(pervote_bucket)(perblock_bucket)(total_unpaid_blocks)(total_producer_stake)
-                                (total_activated_stake)(thresh_activated_stake_time)
-                                (last_producer_schedule_size)(total_producer_vote_weight)(total_active_producer_vote_weight)(last_name_close) )
+                                (total_activated_stake)(thresh_activated_stake_time)(last_producer_schedule_size)
+                                (total_producer_vote_weight)(total_active_producer_vote_weight)(last_name_close) )
    };
 
    /**
@@ -206,15 +203,46 @@ namespace eosiosystem {
    };
 
    /**
-    * Defines new global state parameters to store torewards distribution
+    * Defines new global state parameters to store remme specific parameters
     */
    struct [[eosio::table("globalrem"), eosio::contract("rem.system")]] eosio_global_rem_state {
-      eosio_global_rem_state() { }
-      double  per_stake_share;
-      double  per_vote_share;
+      double  per_stake_share = 0.6;
+      double  per_vote_share  = 0.3;
 
-      EOSLIB_SERIALIZE( eosio_global_rem_state, (per_stake_share)(per_vote_share) )
+      name gifter_attr_contract = name{"rem.attr"};
+      name gifter_attr_issuer   = name{"rem.attr"};
+      name gifter_attr_name     = name{"accgifter"};
+
+      int64_t producer_stake_threshold = 250'000'0000LL;
+
+      microseconds stake_lock_period   = eosio::days(180);
+      microseconds stake_unlock_period = eosio::days(180);
+
+      microseconds reassertion_period = eosio::days( 7 );
+
+      EOSLIB_SERIALIZE( eosio_global_rem_state, (per_stake_share)(per_vote_share)
+                                                (gifter_attr_contract)(gifter_attr_issuer)(gifter_attr_name)
+                                                (producer_stake_threshold)(stake_lock_period)(stake_unlock_period)
+                                                (reassertion_period) )
    };
+
+   /**
+    * Defines new global state parameters to producer schedule rotation
+    */
+   struct [[eosio::table("rotations"), eosio::contract("rem.system")]] rotation_state {
+      time_point   last_rotation_time;
+      microseconds rotation_period;
+      uint32_t     standby_prods_to_rotate;
+
+      std::vector<eosio::producer_key>  standby_rotation;
+
+      EOSLIB_SERIALIZE( rotation_state, (last_rotation_time)(rotation_period)(standby_prods_to_rotate)(standby_rotation) )
+   };
+
+   /**
+    * Global state singleton added in version 1.0
+    */
+   typedef eosio::singleton< "rotations"_n, rotation_state >   rotation_state_singleton;
 
    /**
     * Defines `producer_info` structure to be stored in `producer_info` table, added after version 1.0
@@ -270,9 +298,6 @@ namespace eosiosystem {
     */
    struct [[eosio::table, eosio::contract("rem.system")]] voter_info {
    public:
-      static const microseconds reassertion_period;
-
-   public:
       name                owner;     /// the voter
       name                proxy;     /// the proxy set by the voter, if any
       std::vector<name>   producers; /// the producers approved by this voter if no proxy set
@@ -287,7 +312,7 @@ namespace eosiosystem {
        */
       double              last_vote_weight = 0; /// the vote weight cast the last time the vote was updated
       time_point          stake_lock_time;
-      time_point          last_claim_time;
+      time_point          last_undelegate_time;
 
       /**
        * Total vote weight delegated to this voter.
@@ -310,11 +335,8 @@ namespace eosiosystem {
 
       time_point          last_reassertion_time;
 
-      // Block producer should reassert its status (via voting) every voter_info::reassertion_period days
-      bool vote_is_reasserted() const;
-
       // explicit serialization macro is not necessary, used here only to improve compilation time
-      EOSLIB_SERIALIZE( voter_info, (owner)(proxy)(producers)(staked)(locked_stake)(last_vote_weight)(stake_lock_time)(last_claim_time)(proxied_vote_weight)(is_proxy)(flags1)(reserved2)(reserved3)(last_reassertion_time) )
+      EOSLIB_SERIALIZE( voter_info, (owner)(proxy)(producers)(staked)(locked_stake)(last_vote_weight)(stake_lock_time)(last_undelegate_time)(proxied_vote_weight)(is_proxy)(flags1)(reserved2)(reserved3)(last_reassertion_time) )
    };
 
    struct [[eosio::table, eosio::contract("rem.system")]] user_resources {
@@ -322,11 +344,13 @@ namespace eosiosystem {
       asset         net_weight;
       asset         cpu_weight;
       int64_t       own_stake_amount = 0; //controlled by delegatebw and undelegatebw only
+      int64_t       free_stake_amount = 0; // some accounts may get free stake for all resources,
+                                           // that will decrease when user stake own tokens above the free limits
 
       uint64_t primary_key()const { return owner.value; }
 
       // explicit serialization macro is not necessary, used here only to improve compilation time
-      EOSLIB_SERIALIZE( user_resources, (owner)(net_weight)(cpu_weight)(own_stake_amount) )
+      EOSLIB_SERIALIZE( user_resources, (owner)(net_weight)(cpu_weight)(own_stake_amount)(free_stake_amount) )
    };
 
    /**
@@ -565,6 +589,9 @@ namespace eosiosystem {
          rex_balance_table       _rexbalance;
          rex_order_table         _rexorders;
 
+         rotation_state_singleton _rotation;
+         rotation_state           _grotation;
+
       public:
          static constexpr eosio::name active_permission{"active"_n};
          static constexpr eosio::name token_account{"rem.token"_n};
@@ -582,10 +609,8 @@ namespace eosiosystem {
          static constexpr symbol ram_symbol     = symbol(symbol_code("RAM"), 0);
          static constexpr symbol rex_symbol     = symbol(symbol_code("REX"), 4);
 
-
          static constexpr uint8_t max_block_producers      = 21;
-         static constexpr int64_t producer_stake_threshold = 250'000'0000LL;
-
+         
 
          /**
           * System contract constructor.
@@ -619,6 +644,21 @@ namespace eosiosystem {
        [[eosio::action]]
        void setunloperiod( uint64_t period_in_days);
 
+
+        // Actions:
+        /**
+         * setgiftcontra - set contract that owns attribute that allows to create accounts with gifted resources
+         * setgiftiss    - set issuer that owns attribute that allows to create accounts with gifted resources
+         * setgiftattr   - set attribute name that allows to create accounts with gifted resources
+         */
+       [[eosio::action]]
+       void setgiftcontra( name value );
+       [[eosio::action]]
+       void setgiftiss( name value);
+       [[eosio::action]]
+       void setgiftattr( name value );
+
+
          // Actions:
          /**
           * Init action.
@@ -635,6 +675,27 @@ namespace eosiosystem {
           */
          [[eosio::action]]
          void init( unsigned_int version, const symbol& core );
+
+
+         /**
+          * New account action
+          *
+          * @details Called after a new account is created. This code enforces resource-limits rules
+          * for new accounts as well as new account naming conventions.
+          *
+          * 1. accounts cannot contain '.' symbols which forces all acccounts to be 12
+          * characters long without '.' until a future account auction process is implemented
+          * which prevents name squatting.
+          *
+          * 2. new accounts must stake a minimal number of tokens (as set in system parameters)
+          * therefore, this method will execute an inline buyram from receiver for newacnt in
+          * an amount equal to the current new account creation fee.
+          */
+         [[eosio::action]]
+         void newaccount( const name&       creator,
+                          const name&       name,
+                          ignore<authority> owner,
+                          ignore<authority> active);
 
          /**
           * On block action.
@@ -1011,6 +1072,17 @@ namespace eosiosystem {
          [[eosio::action]]
          void refund( const name& owner );
 
+         /**
+          * Refund to stake action.
+          *
+          * @details This action is called after the delegation-period to restake without lock all pending
+          * unstaked tokens belonging to owner.
+          *
+          * @param owner - the owner of the tokens claimed.
+          */
+         [[eosio::action]]
+         void refundtostake( const name& owner );
+
          // functions defined in voting.cpp
 
          /**
@@ -1248,6 +1320,7 @@ namespace eosiosystem {
          void setinflation( int64_t annual_rate, int64_t inflation_pay_factor, int64_t votepay_factor );
 
          using init_action = eosio::action_wrapper<"init"_n, &system_contract::init>;
+         using newaccount_action = eosio::action_wrapper<"newaccount"_n, &system_contract::newaccount>;
          using delegatebw_action = eosio::action_wrapper<"delegatebw"_n, &system_contract::delegatebw>;
          using deposit_action = eosio::action_wrapper<"deposit"_n, &system_contract::deposit>;
          using withdraw_action = eosio::action_wrapper<"withdraw"_n, &system_contract::withdraw>;
@@ -1284,6 +1357,7 @@ namespace eosiosystem {
          using closerex_action = eosio::action_wrapper<"closerex"_n, &system_contract::closerex>;
          using undelegatebw_action = eosio::action_wrapper<"undelegatebw"_n, &system_contract::undelegatebw>;
          using refund_action = eosio::action_wrapper<"refund"_n, &system_contract::refund>;
+         using refundtostake_action = eosio::action_wrapper<"refundtostake"_n, &system_contract::refundtostake>;
          using regproducer_action = eosio::action_wrapper<"regproducer"_n, &system_contract::regproducer>;
          using unregprod_action = eosio::action_wrapper<"unregprod"_n, &system_contract::unregprod>;
          using setram_action = eosio::action_wrapper<"setram"_n, &system_contract::setram>;
@@ -1304,6 +1378,10 @@ namespace eosiosystem {
          using setrwrdratio_action = eosio::action_wrapper<"setrwrdratio"_n, &system_contract::setrwrdratio>;
          using setlockperiod_action = eosio::action_wrapper<"setlockperiod"_n, &system_contract::setlockperiod>;
          using setunloperiod_action = eosio::action_wrapper<"setunloperiod"_n, &system_contract::setunloperiod>;
+
+         using setgiftcontra_action = eosio::action_wrapper<"setgiftcontra"_n, &system_contract::setgiftcontra>;
+         using setgiftiss_action    = eosio::action_wrapper<"setgiftiss"_n,    &system_contract::setgiftiss>;
+         using setgiftattr_action   = eosio::action_wrapper<"setgiftattr"_n,   &system_contract::setgiftattr>;
 
       private:
          // Implementation details:
@@ -1371,13 +1449,17 @@ namespace eosiosystem {
                                                double shares_rate, bool reset_to_zero = false );
          double update_total_votepay_share( const time_point& ct,
                                             double additional_shares_delta = 0.0, double shares_rate_delta = 0.0 );
-         bool does_satisfy_stake_requirement( const name& producer ) const;
-         bool is_block_producer( const name& producer ) const;
 
 
          // defined in producer_pay.cpp
          int64_t share_pervote_reward_between_producers(int64_t amount);
          void update_pervote_shares();
+
+         // Block producer should reassert its status (via voting) every reassertion_period days
+         bool vote_is_reasserted( eosio::time_point last_reassertion_time ) const;
+
+         //defined in rotation.cpp
+         std::vector<eosio::producer_key> get_rotated_schedule();
 
          template <auto system_contract::*...Ptrs>
          class registration {

@@ -1721,6 +1721,48 @@ read_only::get_producers_result read_only::get_producers( const read_only::get_p
    return result;
 }
 
+read_only::get_voters_result read_only::get_voters( const read_only::get_voters_params& p ) const {
+   get_voters_result result;
+   try{   
+      const abi_def abi = eosio::chain_apis::get_abi(db, config::system_account_name);
+      
+      const auto table_type = get_table_type(abi, N(voters));
+      const abi_serializer abis{ abi, abi_serializer_max_time };
+      EOS_ASSERT(table_type == KEYi64, chain::contract_table_query_exception, "Invalid table type ${type} for table voters", ("type",table_type));
+
+      const auto& d = db.db();
+      const auto* const table_id = d.find<chain::table_id_object, chain::by_code_scope_table>(boost::make_tuple(config::system_account_name, config::system_account_name, N(voters)));
+      const auto& kv_index = d.get_index<key_value_index, by_scope_primary>();
+
+      const auto stopTime = fc::time_point::now() + fc::microseconds(1000 * 10); // 10ms
+      vector<char> data;
+
+      const auto lower = name{p.lower_bound};
+      auto it = kv_index.lower_bound(boost::make_tuple(table_id->id, lower.value));
+
+      for( ; it != kv_index.end(); ++it ) {
+         if (result.rows.size() >= p.limit || fc::time_point::now() > stopTime) {
+            result.more = name{it->primary_key}.to_string();
+            break;
+         }
+
+         copy_inline_row(*it, data);
+         if (p.json)
+            result.rows.emplace_back( abis.binary_to_variant( abis.get_table_type(N(voters)), data, abi_serializer_max_time, shorten_abi_errors ) );
+         else
+            result.rows.emplace_back(fc::variant(data));         
+      }
+   }
+   catch (...) {
+      FC_LOG_MESSAGE(error, "Exception in: ${func}", ("func",__FUNCTION__));
+
+      fc::variant row = fc::mutable_variant_object()("error", "Internal error");
+      result.rows.push_back(row);
+   }
+
+   return result;
+}
+
 read_only::get_producer_schedule_result read_only::get_producer_schedule( const read_only::get_producer_schedule_params& p ) const {
    read_only::get_producer_schedule_result result;
    to_variant(db.active_producers(), result.active);
@@ -2152,9 +2194,9 @@ read_only::get_account_results read_only::get_account( const get_account_params&
    result.last_code_update = accnt_metadata_obj.last_code_update;
    result.created          = accnt_obj.creation_date;
 
-   bool grelisted = db.is_resource_greylisted(result.account_name);
-   result.net_limit = rm.get_account_net_limit_ex( result.account_name, !grelisted);
-   result.cpu_limit = rm.get_account_cpu_limit_ex( result.account_name, !grelisted);
+   uint32_t greylist_limit = db.is_resource_greylisted(result.account_name) ? 1 : config::maximum_elastic_resource_multiplier;
+   result.net_limit = rm.get_account_net_limit_ex( result.account_name, greylist_limit).first;
+   result.cpu_limit = rm.get_account_cpu_limit_ex( result.account_name, greylist_limit).first;
    result.ram_usage = rm.get_account_ram_usage( result.account_name );
 
    const auto& permissions = d.get_index<permission_index,by_owner>();

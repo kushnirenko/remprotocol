@@ -2,16 +2,19 @@
  *  @copyright defined in eos/LICENSE.txt
  */
 
+
 #include <eosio/crypto.hpp>
 #include <eosio/dispatcher.hpp>
 
 #include <rem.system/rem.system.hpp>
+#include <rem.attr/rem.attr.hpp>
 
 #include "producer_pay.cpp"
 #include "delegate_bandwidth.cpp"
 #include "voting.cpp"
 #include "exchange_state.cpp"
 #include "rex.cpp"
+#include "rotation.cpp"
 
 namespace eosiosystem {
 
@@ -36,6 +39,7 @@ namespace eosiosystem {
     _global4(_self, _self.value),
     _globalrem(_self, _self.value),
     _rammarket(_self, _self.value),
+    _rotation(_self, _self.value),
     _rexpool(_self, _self.value),
     _rexfunds(_self, _self.value),
     _rexbalance(_self, _self.value),
@@ -47,6 +51,12 @@ namespace eosiosystem {
       _gstate3 = _global3.exists() ? _global3.get() : eosio_global_state3{};
       _gstate4 = _global4.exists() ? _global4.get() : get_default_inflation_parameters();
       _gremstate = _globalrem.exists() ? _globalrem.get() : get_default_rem_parameters();
+
+      _grotation = _rotation.get_or_create(_self, rotation_state{
+         .last_rotation_time      = time_point{},
+         .rotation_period         = eosio::hours(4),
+         .standby_prods_to_rotate = 4
+      });
    }
 
    eosio_global_state system_contract::get_default_parameters() {
@@ -64,10 +74,23 @@ namespace eosiosystem {
    }
 
    eosio_global_rem_state system_contract::get_default_rem_parameters() {
-      eosio_global_rem_state gs;
-      gs.per_stake_share = 0.6;
-      gs.per_vote_share = 0.3;
-      return gs;
+      const auto rem_state = eosio_global_rem_state{
+         .per_stake_share = 0.6,
+         .per_vote_share = 0.3,
+
+         .gifter_attr_contract = name{"rem.attr"},
+         .gifter_attr_issuer   = name{"rem.attr"},
+         .gifter_attr_name     = name{"accgifter"},
+
+         .producer_stake_threshold = 250'000'0000LL,
+
+         .stake_lock_period = eosio::days(180),
+         .stake_unlock_period = eosio::days(180),
+
+         .reassertion_period = eosio::days( 7 )
+      };
+
+      return rem_state;
    }
 
    symbol system_contract::core_symbol()const {
@@ -81,6 +104,7 @@ namespace eosiosystem {
       _global3.set( _gstate3, _self );
       _global4.set( _gstate4, _self );
       _globalrem.set( _gremstate, _self );
+      _rotation.set( _grotation, _self );
    }
 
    void system_contract::setrwrdratio( double stake_share, double vote_share ) {
@@ -97,14 +121,32 @@ namespace eosiosystem {
       require_auth(_self);
 
       check(period_in_days != 0, "lock period cannot be zero");
-      _gstate.stake_lock_period = eosio::days(period_in_days);
+      _gremstate.stake_lock_period = eosio::days(period_in_days);
    }
 
    void system_contract::setunloperiod( uint64_t period_in_days ) {
       require_auth(_self);
 
       check(period_in_days != 0, "unlock period cannot be zero");
-      _gstate.stake_unlock_period = eosio::days(period_in_days);
+      _gremstate.stake_unlock_period = eosio::days(period_in_days);
+   }
+
+   void system_contract::setgiftcontra( name value ) {
+      require_auth(_self);
+
+      _gremstate.gifter_attr_contract = value;
+   }
+
+   void system_contract::setgiftiss( name value ) {
+      require_auth(_self);
+
+      _gremstate.gifter_attr_issuer = value;
+   }
+
+   void system_contract::setgiftattr( name value ) {
+      require_auth(_self);
+
+      _gremstate.gifter_attr_name = value;
    }
 
    void system_contract::setminstake( uint64_t min_account_stake ) {
@@ -306,7 +348,7 @@ namespace eosiosystem {
     *  who can create accounts with the creator's name as a suffix.
     *
     */
-   void native::newaccount( const name&       creator,
+   void system_contract::newaccount( const name&       creator,
                             const name&       newact,
                             ignore<authority> owner,
                             ignore<authority> active ) {
@@ -336,13 +378,24 @@ namespace eosiosystem {
 
       user_resources_table  userres( _self, newact.value);
 
+      int64_t free_stake_amount = 0;
+      int64_t free_gift_bytes   = 0;
+
+      if ( eosio::attribute::has_attribute( _gremstate.gifter_attr_contract, _gremstate.gifter_attr_issuer, creator, _gremstate.gifter_attr_name ) ) {
+         const auto system_token_max_supply = eosio::token::get_max_supply(token_account, system_contract::get_core_symbol().code() );
+         const double bytes_per_token       = (double)_gstate.max_ram_size / (double)system_token_max_supply.amount;
+         free_stake_amount                  = _gstate.min_account_stake;
+         free_gift_bytes                    = bytes_per_token * free_stake_amount;
+      }
+
       userres.emplace( newact, [&]( auto& res ) {
         res.owner = newact;
         res.net_weight = asset( 0, system_contract::get_core_symbol() );
         res.cpu_weight = asset( 0, system_contract::get_core_symbol() );
+        res.free_stake_amount = free_stake_amount;
       });
 
-      set_resource_limits( newact, 0, 0, 0 );
+      set_resource_limits( newact, free_gift_bytes, 0, 0 );
    }
 
    void native::setabi( const name& acnt, const std::vector<char>& abi ) {
@@ -383,9 +436,10 @@ namespace eosiosystem {
       token::open_action open_act{ token_account, { {_self, active_permission} } };
       open_act.send( rex_account, core, _self );
    }
-
-   const microseconds voter_info::reassertion_period = eosio::days( 7 );
-
+         
+   bool system_contract::vote_is_reasserted( eosio::time_point last_reassertion_time ) const {
+         return (current_time_point() - last_reassertion_time) < _gremstate.reassertion_period;
+   }
 } /// rem.system
 
 
@@ -394,12 +448,13 @@ EOSIO_DISPATCH( eosiosystem::system_contract,
      (newaccount)(updateauth)(deleteauth)(linkauth)(unlinkauth)(canceldelay)(onerror)(setabi)
      // rem.system.cpp
      (init)(setram)(setminstake)(setramrate)(setparams)(setpriv)(setalimits)(setrwrdratio)
-     (setlockperiod)(setunloperiod)(activate)(rmvproducer)(updtrevision)(bidname)(bidrefund)(setinflation)
+     (setlockperiod)(setunloperiod)(setgiftcontra)(setgiftiss)(setgiftattr)
+     (activate)(rmvproducer)(updtrevision)(bidname)(bidrefund)(setinflation)
      // rex.cpp
      (deposit)(withdraw)(buyrex)(unstaketorex)(sellrex)(cnclrexorder)(rentcpu)(rentnet)(fundcpuloan)(fundnetloan)
      (defcpuloan)(defnetloan)(updaterex)(consolidate)(mvtosavings)(mvfrsavings)(setrex)(rexexec)(closerex)
      // delegate_bandwidth.cpp
-     (delegatebw)(undelegatebw)(refund)
+     (delegatebw)(undelegatebw)(refund)(refundtostake)
      // voting.cpp
      (regproducer)(unregprod)(voteproducer)(regproxy)
      // producer_pay.cpp

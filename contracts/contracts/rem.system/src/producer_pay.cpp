@@ -18,9 +18,8 @@ namespace eosiosystem {
    const int64_t  useconds_per_day      = 24 * 3600 * int64_t(1000000);
    const int64_t  useconds_per_year     = seconds_per_year*1000000ll;
 
-   const static int producer_count = 21;
    const static int producer_repetitions = 12;
-   const static int blocks_per_round = producer_count * producer_repetitions;
+   const static int blocks_per_round = system_contract::max_block_producers * producer_repetitions;
 
 
    int64_t system_contract::share_pervote_reward_between_producers(int64_t amount)
@@ -151,7 +150,7 @@ namespace eosiosystem {
 
          const auto& voter = _voters.get( producer.value );
          // TODO fix coupling in voter-producer entities
-         if ( voter.vote_is_reasserted() ) {
+         if ( vote_is_reasserted( voter.last_reassertion_time ) ) {
             _producers.modify( prod, same_payer, [&](auto& p ) {
                   p.current_round_unpaid_blocks++;
             });
@@ -288,19 +287,23 @@ namespace eosiosystem {
 
    void system_contract::torewards( const name& payer, const asset& amount ) {
       require_auth( payer );
+      check( amount.is_valid(), "invalid amount" );
+      check( amount.symbol == core_symbol(), "invalid symbol" );
+      check( amount.amount > 0, "amount must be positive" );
+
       const auto to_per_stake_pay = amount.amount * _gremstate.per_stake_share;
       const auto to_per_vote_pay  = share_pervote_reward_between_producers(amount.amount * _gremstate.per_vote_share);
       const auto to_rem           = amount.amount - (to_per_stake_pay + to_per_vote_pay);
       if( amount.amount > 0 ) {
         token::transfer_action transfer_act{ token_account, { {payer, active_permission} } };
         if( to_rem > 0 ) {
-           transfer_act.send( payer, saving_account, asset(to_rem, core_symbol()), "Remme Savings" );
+           transfer_act.send( payer, saving_account, asset(to_rem, amount.symbol), "Remme Savings" );
         }
         if( to_per_stake_pay > 0 ) {
-           transfer_act.send( payer, spay_account, asset(to_per_stake_pay, core_symbol()), "fund per-stake bucket" );
+           transfer_act.send( payer, spay_account, asset(to_per_stake_pay, amount.symbol), "fund per-stake bucket" );
         }
         if( to_per_vote_pay > 0 ) {
-           transfer_act.send( payer, vpay_account, asset(to_per_vote_pay, core_symbol()), "fund per-vote bucket" );
+           transfer_act.send( payer, vpay_account, asset(to_per_vote_pay, amount.symbol), "fund per-vote bucket" );
         }
       }
 

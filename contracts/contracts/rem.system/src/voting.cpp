@@ -31,16 +31,12 @@ namespace eosiosystem {
       check( producer_key != eosio::public_key(), "public key should not be the default value" );
       require_auth( producer );
 
-      // TODO implement as constexpr string
-      static const auto stake_err = "user should stake at least "s + asset(producer_stake_threshold, core_symbol()).to_string() + " to become a producer"s;
+      user_resources_table totals_tbl( _self, producer.value );
+      const auto& tot = totals_tbl.get(producer.value, "producer must have resources");
+      check( tot.own_stake_amount >= _gremstate.producer_stake_threshold, "user should stake at least "s + asset(_gremstate.producer_stake_threshold, core_symbol()).to_string() + " to become a producer"s );
 
       auto prod = _producers.find( producer.value );
       const auto ct = current_time_point();
-
-      user_resources_table totals_tbl( _self, producer.value );
-      const auto& tot = totals_tbl.get(producer.value, "producer must have resources");
-      const auto &voter = _voters.get(producer.value, "user has no resources");
-      check( voter.staked >= producer_stake_threshold, stake_err );
 
       if ( prod != _producers.end() ) {
          if (!prod->active()) {
@@ -82,22 +78,10 @@ namespace eosiosystem {
          });
          _gstate.total_producer_stake += tot.own_stake_amount;
       }
-
-       const auto lock_time = voter.locked_stake >= system_contract::producer_stake_threshold ? current_time_point()
-                                                                                              : current_time_point() + _gstate.stake_lock_period;
-       _voters.modify(voter, producer, [&](auto &v) {
-           v.stake_lock_time = lock_time;
-           v.locked_stake = tot.own_stake_amount;
-       });
    }
 
    void system_contract::unregprod( const name& producer ) {
       require_auth( producer );
-
-      const auto &voter = _voters.get(producer.value, "user has no resources");
-      check( voter.stake_lock_time <= current_time_point(), "producers are not allowed to unregister during stake lock period" );
-
-      claimrewards(producer);
 
       const auto& prod = _producers.get( producer.value, "producer not found" );
       if (prod.active()) {
@@ -109,41 +93,21 @@ namespace eosiosystem {
       _producers.modify( prod, same_payer, [&]( producer_info& info ){
          info.deactivate();
       });
-
-      _voters.modify(voter, producer, [&](auto &v) {
-         v.stake_lock_time = current_time_point() + _gstate.stake_unlock_period;
-      });
    }
 
    void system_contract::update_elected_producers( const block_timestamp& block_time ) {
       _gstate.last_producer_schedule_update = block_time;
 
-      auto idx = _producers.get_index<"prototalvote"_n>();
-
-      std::vector< std::pair<eosio::producer_key,uint16_t> > top_producers;
-      top_producers.reserve(max_block_producers);
-
-      // TODO rewrite in algorithm terms
-      // TODO check if we can rely on producer_info::active()
-      for ( auto it = idx.cbegin(); it != idx.cend() && top_producers.size() < 21 && 0 < it->total_votes && it->active(); ++it ) {
-         top_producers.emplace_back( std::pair<eosio::producer_key,uint16_t>({{it->owner, it->producer_key}, it->location}) );
-      }
-
-      if ( top_producers.size() == 0 || top_producers.size() < _gstate.last_producer_schedule_size ) {
+      auto producers = get_rotated_schedule();
+      if ( producers.size() == 0 || producers.size() < _gstate.last_producer_schedule_size ) {
          return;
       }
 
       /// sort by producer name
-      std::sort( top_producers.begin(), top_producers.end() );
-
-      std::vector<eosio::producer_key> producers;
-
-      producers.reserve(top_producers.size());
-      for( const auto& item : top_producers )
-         producers.push_back(item.first);
+      std::sort( producers.begin(), producers.end() );
 
       if( set_proposed_producers( producers ) >= 0 ) {
-         _gstate.last_producer_schedule_size = static_cast<decltype(_gstate.last_producer_schedule_size)>( top_producers.size() );
+         _gstate.last_producer_schedule_size = static_cast<decltype(_gstate.last_producer_schedule_size)>( producers.size() );
       }
    }
 
@@ -151,7 +115,7 @@ namespace eosiosystem {
       check(locked_stake_period != time_point(), "vote should have mature time");
 
       const auto weeks_to_mature = fmax( ((locked_stake_period - current_time_point()) - eosio::days(7)).count() / eosio::days(7).count(), 0.0 );
-      const auto rem_weight = 1.0 - (weeks_to_mature) / (_gstate.stake_lock_period.count() / eosio::days(7).count());
+      const auto rem_weight = 1.0 - (weeks_to_mature) / (_gremstate.stake_lock_period.count() / eosio::days(7).count());
       const double eos_weight = std::pow( 2, int64_t((current_time_point().sec_since_epoch() - (block_timestamp::block_timestamp_epoch / 1000)) / (seconds_per_day * 7)) / double(52) );
 
       const auto vote_weight = double(staked) * eos_weight * rem_weight;
@@ -162,8 +126,6 @@ namespace eosiosystem {
 
    void system_contract::voteproducer( const name& voter_name, const name& proxy, const std::vector<name>& producers ) {
       require_auth( voter_name );
-
-      check( is_block_producer( voter_name ), "only block producers are allowed to vote" );
 
       vote_stake_updater( voter_name );
       update_votes( voter_name, proxy, producers, true );
@@ -339,23 +301,4 @@ namespace eosiosystem {
          }
       );
    }
-
-   bool system_contract::does_satisfy_stake_requirement( const name& producer ) const {
-      const auto voter = _voters.find( producer.value );
-
-      if ( voter == _voters.end() ) {
-         return false;
-      }
-
-      return voter->staked >= producer_stake_threshold;
-   }
-
-   bool system_contract::is_block_producer( const name& producer ) const {
-      return _producers.find( producer.value ) != _producers.end();
-   }
-   
-   bool voter_info::vote_is_reasserted() const {
-         return (current_time_point() - last_reassertion_time) < voter_info::reassertion_period;
-   }
-
 } /// namespace eosiosystem
