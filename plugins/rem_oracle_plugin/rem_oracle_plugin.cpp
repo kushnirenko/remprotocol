@@ -51,22 +51,30 @@ class rem_oracle_plugin_impl {
        while(true) {
          try {
            wlog("price monitor started");
-           double coingecko_price = get_coingecko_rem_price(coingecko_host, coingecko_endpoint);
-           wlog("avg coingecko: ${p}", ("p", coingecko_price));
-           double cryptocompare_price = 0;
-           if(_cryptocompare_apikey != "0") {
-             double cryptocompare_price = get_cryptocompare_rem_price(cryptocompare_host,
-                                                                     (string(cryptocompare_endpoint)+string(cryptocompare_params)+_cryptocompare_apikey).c_str());
-             wlog("avg cryptocompare: ${p}", ("p", cryptocompare_price));
+           std::map<std::string, double> coingecko_prices;
+           std::map<std::string, double> cryptocompare_prices;
+           std::map<std::string, double> average_prices;
+           std::string currencies[] = {"USD", "BTC", "ETH"};
+
+           for(size_t i = 0; i < 3; i++) {
+             coingecko_prices[ currencies[i] ] = get_coingecko_rem_price(coingecko_host, coingecko_endpoint, (currencies[i] == "USD" ? "USDT" : currencies[i].c_str()) );
+             wlog("avg ${c} coingecko: ${p}", ("c", currencies[i])("p", coingecko_prices[ currencies[i] ]));
+
+             cryptocompare_prices[ currencies[i] ] = 0;
+
+             if(_cryptocompare_apikey != "0") {
+               cryptocompare_prices[ currencies[i] ] = get_cryptocompare_rem_price(cryptocompare_host,
+                                                                       (string(cryptocompare_endpoint)+string(cryptocompare_params)+_cryptocompare_apikey).c_str(),
+                                                                        currencies[i].c_str());
+               wlog("avg ${c} cryptocompare: ${p}", ("c", currencies[i])("p", cryptocompare_prices[ currencies[i] ]));
+             }
+             int count = (coingecko_prices[ currencies[i] ] == 0 ? 0 : 1) + (cryptocompare_prices[ currencies[i] ] == 0 ? 0 : 1);
+             double price_sum = (coingecko_prices[ currencies[i] ] == 0 ? 0 : coingecko_prices[ currencies[i] ]) +
+                                (cryptocompare_prices[ currencies[i] ] == 0 ? 0 : cryptocompare_prices[ currencies[i] ]);
+             average_prices[ currencies[i] ] = price_sum / count;
            }
-           int count = (coingecko_price == 0 ? 0 : 1) + (cryptocompare_price == 0 ? 0 : 1);
-           double price_sum = (coingecko_price == 0 ? 0 : coingecko_price) + (cryptocompare_price == 0 ? 0 : cryptocompare_price);
-           double avg_price = price_sum / count;
 
-           set_price_data price_data;
-           price_data.price = avg_price;
-
-           this->push_set_price_transaction(price_data);
+           this->push_set_price_transaction(average_prices);
 
            sleep(update_price_period);
          } FC_LOG_AND_RETHROW()
@@ -85,7 +93,7 @@ class rem_oracle_plugin_impl {
          return response;
      }
 
-     double get_coingecko_rem_price(const char* coingecko_host, const char* remme_endpoint) {
+     double get_coingecko_rem_price(const char* coingecko_host, const char* remme_endpoint, const char* to_currency) {
          std::string response = make_request(coingecko_host, remme_endpoint);
 
          boost::iostreams::stream<boost::iostreams::array_source> stream(response.c_str(), response.size());
@@ -103,7 +111,7 @@ class rem_oracle_plugin_impl {
              //boost::optional<std::string> txid_opt = subtree.get_optional<std::string>("transactionHash");
              //cout << "t2: " << data_opt.get() << endl;
 
-             if(target_opt && target_opt.get() == "USDT") {
+             if(target_opt && target_opt.get() == to_currency) {
                  sum += boost::lexical_cast<double>(last_opt.get());
                  counter++;
              }
@@ -113,14 +121,14 @@ class rem_oracle_plugin_impl {
          return sum/counter;
      }
 
-     double get_cryptocompare_rem_price(const char* cryptocompare_host, const char* cryptocompare_endpoint) {
+     double get_cryptocompare_rem_price(const char* cryptocompare_host, const char* cryptocompare_endpoint, const char* to_currency) {
          std::string response = make_request(cryptocompare_host, cryptocompare_endpoint);
 
          boost::iostreams::stream<boost::iostreams::array_source> stream(response.c_str(), response.size());
          namespace pt = boost::property_tree;
          pt::ptree root;
          pt::read_json(stream, root);
-         boost::optional<double> price_opt = root.get_optional<double>("USD");
+         boost::optional<double> price_opt = root.get_optional<double>(to_currency);
          if (price_opt)
              return price_opt.get();
          else
@@ -128,7 +136,7 @@ class rem_oracle_plugin_impl {
 
      }
 
-     void push_set_price_transaction(const set_price_data& data) {
+     void push_set_price_transaction(const std::map<std::string, double>& pairs_data) {
          std::vector<signed_transaction> trxs;
          trxs.reserve(2);
 
@@ -139,7 +147,7 @@ class rem_oracle_plugin_impl {
 
          trx.actions.emplace_back(vector<chain::permission_level>{{this->_oracle_signing_account,this->_oracle_signing_permission}},
            setprice{this->_oracle_signing_account,
-             data.price});
+             pairs_data});
 
          trx.expiration = cc.head_block_time() + fc::seconds(30);
          trx.set_reference_block(cc.head_block_id());

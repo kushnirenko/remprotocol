@@ -14,13 +14,10 @@ const char* coingecko_endpoint = "/api/v3/coins/remme/tickers";
 
 const char* cryptocompare_host = "min-api.cryptocompare.com";
 const char* cryptocompare_endpoint = "/data/price";
-const char* cryptocompare_params = "?fsym=REM&tsyms=USD&apikey=";
+const char* cryptocompare_params = "?fsym=REM&tsyms=USD,BTC,ETH&apikey=";
 
 uint32_t update_price_period = 3600;  // seconds
 
-struct set_price_data {
-    double price;
-};
 
 /**
  *  This is a template plugin, intended to serve as a starting point for making new plugins
