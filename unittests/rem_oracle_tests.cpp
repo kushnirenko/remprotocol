@@ -322,7 +322,7 @@ oracle_tester::oracle_tester() {
 
 BOOST_AUTO_TEST_SUITE(rem_oracle_tests)
 
-BOOST_FIXTURE_TEST_CASE( setprice_action, oracle_tester ) {
+BOOST_FIXTURE_TEST_CASE( setprice_test, oracle_tester ) {
    try {
       const auto _producers = control->head_block_state()->active_schedule.producers;
       uint32_t majority_amount = (_producers.size() * 2 / 3) + 1;
@@ -334,12 +334,14 @@ BOOST_FIXTURE_TEST_CASE( setprice_action, oracle_tester ) {
          {N(remeth), 0.0000176688}
       };
 
-      for (uint64_t i = 0; i < _producers.size(); ++i) {
+      for (size_t i = 0; i < _producers.size(); ++i) {
          setprice(_producers[i].producer_name, pair_price);
 
          for (const auto &pair : supported_pairs) {
             auto pair_data = get_remprice_tbl(pair);
 
+            // if the amount of producers points in the pricedata < majority amount, at the first time
+            // remprice should be an empty
             if (i < majority_amount) {
                BOOST_TEST_REQUIRE(pair_data.is_null());
             } else {
@@ -376,7 +378,7 @@ BOOST_FIXTURE_TEST_CASE( setprice_action, oracle_tester ) {
          for (const auto &pair : supported_pairs) {
 
             auto pair_data = get_remprice_tbl(pair);
-//            auto supported_pairs = get_singtable(N(rem.oracle), N(suppdpairs), "suppdpairs");
+            auto supported_pairs = get_singtable(N(rem.oracle), N(suppdpairs), "suppdpairs");
 
             vector<variant> pair_points(_producers.size(), pair_price[pair]);
 
@@ -396,13 +398,13 @@ BOOST_FIXTURE_TEST_CASE( setprice_action, oracle_tester ) {
                      {N(rembtc), 0.0000003957} };
       BOOST_REQUIRE_THROW(setprice(N(proda), pair_price), eosio_assert_message_exception );
       // unsupported pairs
-      pair_price[N(rembtc)] = 0.0000003957;
+      pair_price[N(remxrp)] = 0.0000003957;
       BOOST_REQUIRE_THROW(setprice(N(proda), pair_price), eosio_assert_message_exception );
 
    } FC_LOG_AND_RETHROW()
 }
 
-BOOST_FIXTURE_TEST_CASE( setprice_action_median_test, oracle_tester ) {
+BOOST_FIXTURE_TEST_CASE( setprice_median_test, oracle_tester ) {
    try {
       const auto _producers = control->head_block_state()->active_schedule.producers;
       vector<name> supported_pairs = {N(remusd), N(rembtc), N(remeth)};
@@ -437,12 +439,14 @@ BOOST_FIXTURE_TEST_CASE( setprice_action_median_test, oracle_tester ) {
       BOOST_TEST_REQUIRE(remeth_data["price_points"].get_array() == remeth_points);
 
       // shift median remusd on nth position
-      for(int i = 0; i < (_producers.size() - majority_amount); ++i) {
+      // the range of points remusd is a [ 1 .. 21 ], to shift median need to reduce delta of the current subset
+      for(size_t i = 0; i < (_producers.size() - majority_amount); ++i) {
          produce_blocks_for_n_rounds(29); // +1 hour
 
+         // increase the prev delta for the current subset
          pair_price[N(remusd)] = i + 1;
          setprice(_producers.at(i).producer_name, pair_price);
-
+         // decrease by 0.5 the current delta
          pair_price[N(remusd)] = i + 2.5;
          setprice(_producers.at(i + 1).producer_name, pair_price);
 
@@ -450,6 +454,75 @@ BOOST_FIXTURE_TEST_CASE( setprice_action_median_test, oracle_tester ) {
 
          BOOST_TEST_REQUIRE(remusd_data["price"].as_double() == remusd_points[(majority_amount / 2) + i + 1]);
       }
+
+   } FC_LOG_AND_RETHROW()
+}
+
+BOOST_FIXTURE_TEST_CASE( addpair_test, oracle_tester ) {
+   try {
+      const auto _producers = control->head_block_state()->active_schedule.producers;
+      vector<name> supported_pairs = {N(remusd), N(rembtc), N(remeth)};
+
+      map<name, double> pair_price {
+         {N(remusd), 0.003210},
+         {N(rembtc), 0.0000003957},
+         {N(remeth), 0.0000176688}
+      };
+
+      for (const auto &producer : _producers) {
+         setprice(producer.producer_name, pair_price);
+      }
+
+      auto remusd_data = get_remprice_tbl(N(remusd));
+      auto rembtc_data = get_remprice_tbl(N(rembtc));
+      auto remeth_data = get_remprice_tbl(N(remeth));
+
+      supported_pairs.emplace_back(N(rembnb));
+      addsuppdpair(N(rembnb), { {N(rem.oracle), config::active_name} });
+
+      produce_blocks_for_n_rounds(29); // +1 hour
+      pair_price[N(rembnb)] = 1;
+      setprice(N(proda), pair_price);
+
+      auto rembnb_data = get_remprice_tbl(N(rembnb));
+      // rembnb must be empty, because there is only 1 point of the active producer
+      BOOST_TEST_REQUIRE(rembnb_data.is_null());
+
+      auto remusd_data_after = get_remprice_tbl(N(remusd));
+      auto rembtc_data_after = get_remprice_tbl(N(rembtc));
+      auto remeth_data_after = get_remprice_tbl(N(remeth));
+
+      BOOST_TEST_REQUIRE(remusd_data["price"] == remusd_data_after["price"]);
+      BOOST_TEST_REQUIRE(remusd_data["pair"] == remusd_data_after["pair"]);
+      BOOST_TEST_REQUIRE(remusd_data["last_update"] == remusd_data_after["last_update"]);
+
+      BOOST_TEST_REQUIRE(rembtc_data["price"] == rembtc_data_after["price"]);
+      BOOST_TEST_REQUIRE(rembtc_data["pair"] == rembtc_data_after["pair"]);
+      BOOST_TEST_REQUIRE(rembtc_data["last_update"] == rembtc_data_after["last_update"]);
+
+      BOOST_TEST_REQUIRE(remeth_data["price"] == remeth_data_after["price"]);
+      BOOST_TEST_REQUIRE(remeth_data["pair"] == remeth_data_after["pair"]);
+      BOOST_TEST_REQUIRE(remeth_data["last_update"] == remeth_data_after["last_update"]);
+
+      produce_blocks_for_n_rounds(29); // +1 hour
+      // add new pair data (rembnb)
+      for (const auto &producer : _producers) {
+         setprice(producer.producer_name, pair_price);
+      }
+      vector<variant> rembnb_points(_producers.size(), pair_price[N(rembnb)]);
+      time_point ct = control->head_block_time();
+      rembnb_data = get_remprice_tbl(N(rembnb));
+
+      BOOST_TEST_REQUIRE(rembnb_data["price"].as_double() == pair_price[N(rembnb)]);
+      BOOST_TEST_REQUIRE(rembnb_data["pair"].as_string() == "rembnb");
+      BOOST_TEST_REQUIRE(rembnb_data["price_points"].get_array() == rembnb_points);
+      BOOST_TEST_REQUIRE(rembnb_data["last_update"].as_string() == string(ct));
+
+      // the pair is already supported
+      BOOST_REQUIRE_THROW(addsuppdpair(N(rembnb), { {N(rem.oracle), config::active_name} }),
+                          eosio_assert_message_exception);
+      // missing required authority rem.oracle
+      BOOST_REQUIRE_THROW(addsuppdpair(N(btcrem), { {N(proda), config::active_name} }), missing_auth_exception);
 
    } FC_LOG_AND_RETHROW()
 }

@@ -101,7 +101,6 @@ namespace eosio {
       pairs_inx        supported_pairs_tbl;
       suppdpairs       suppdpairs_data;
 
-      string join(vector <string> &&vec, string delim = string("*"));
       void check_supported_pairs(const std::map<name, double> &pairs);
       void to_rewards(const asset &quantity, const name& payer);
 

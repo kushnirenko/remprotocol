@@ -28,9 +28,9 @@ namespace eosio {
       time_point ct = current_time_point();
 
       if (data_it != pricedata_tbl.end()) {
-         time_point time_delta(seconds(ct.sec_since_epoch() / 3600));
-         time_point frequency(seconds(data_it->last_update.to_time_point().sec_since_epoch() / 3600));
-         check(time_delta > frequency, "the frequency of price changes should not exceed 1 time per hour");
+         uint64_t time_delta = ct.sec_since_epoch() / 3600;
+         uint64_t frequency = data_it->last_update.to_time_point().sec_since_epoch() / 3600;
+         check(time_delta > frequency, "the frequency of price changes should not exceed 1 time during the current hour");
 
          pricedata_tbl.modify(*data_it, producer, [&](auto &p) {
             p.pairs_data = pairs_data;
