@@ -27,6 +27,7 @@
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/lexical_cast.hpp>
+#include <boost/algorithm/string.hpp>
 
 #include <boost/asio.hpp>
 #include <boost/bind.hpp>
@@ -71,7 +72,7 @@ class rem_oracle_plugin_impl {
              int count = (coingecko_prices[ currencies[i] ] == 0 ? 0 : 1) + (cryptocompare_prices[ currencies[i] ] == 0 ? 0 : 1);
              double price_sum = (coingecko_prices[ currencies[i] ] == 0 ? 0 : coingecko_prices[ currencies[i] ]) +
                                 (cryptocompare_prices[ currencies[i] ] == 0 ? 0 : cryptocompare_prices[ currencies[i] ]);
-             average_prices[ N("REM." + currencies[i]) ] = price_sum / count;
+             average_prices[ N(boost::algorithm::to_lower_copy("REM." + currencies[i])) ] = price_sum / count;
            }
 
            this->push_set_price_transaction(average_prices);
