@@ -62,7 +62,7 @@ struct init {
 
 struct setprice {
    account_name                           producer;
-   std::map<std::string, double>          pairs_data;
+   std::map<account_name, double>          pairs_data;
 
    static account_name get_account() {
       return config::oracle_account_name;

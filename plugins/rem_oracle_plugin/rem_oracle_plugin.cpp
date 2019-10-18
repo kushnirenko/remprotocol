@@ -53,7 +53,7 @@ class rem_oracle_plugin_impl {
            wlog("price monitor started");
            std::map<std::string, double> coingecko_prices;
            std::map<std::string, double> cryptocompare_prices;
-           std::map<std::string, double> average_prices;
+           std::map<name, double> average_prices;
            std::string currencies[] = {"USD", "BTC", "ETH"};
 
            for(size_t i = 0; i < 3; i++) {
@@ -71,7 +71,7 @@ class rem_oracle_plugin_impl {
              int count = (coingecko_prices[ currencies[i] ] == 0 ? 0 : 1) + (cryptocompare_prices[ currencies[i] ] == 0 ? 0 : 1);
              double price_sum = (coingecko_prices[ currencies[i] ] == 0 ? 0 : coingecko_prices[ currencies[i] ]) +
                                 (cryptocompare_prices[ currencies[i] ] == 0 ? 0 : cryptocompare_prices[ currencies[i] ]);
-             average_prices[ currencies[i] ] = price_sum / count;
+             average_prices[ N("REM." + currencies[i]) ] = price_sum / count;
            }
 
            this->push_set_price_transaction(average_prices);
@@ -136,7 +136,7 @@ class rem_oracle_plugin_impl {
 
      }
 
-     void push_set_price_transaction(const std::map<std::string, double>& pairs_data) {
+     void push_set_price_transaction(const std::map<name, double>& pairs_data) {
          std::vector<signed_transaction> trxs;
          trxs.reserve(2);
 
