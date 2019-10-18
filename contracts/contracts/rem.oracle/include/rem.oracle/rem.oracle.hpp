@@ -37,27 +37,23 @@ namespace eosio {
       /**
        * Set the current market price of cryptocurrencies action.
        *
-       * @details Set supported market price of cryptocurrencies.
+       * @details Set market price of supported cryptocurrencies.
        *
        * @param producer - the producer account to execute the setprice action for,
-       * @param pairs_data - the pairs rate.
+       * @param pairs_data - the rate of the pairs.
        */
       [[eosio::action]]
       void setprice(const name &producer, std::map<name, double> &pairs_data);
 
       /**
-       * Add new supported pair name action.
+       * Add a new pair action.
        *
-       * @details Add new supported pair name action, action permitted only for block producers.
+       * @details Add a new pair that will be supported, action permitted only for block producers.
        *
-       * @param pair - the new supported pair name.
+       * @param pair - the new pair name.
        */
       [[eosio::action]]
-      void addsuppdpair(const name &pair);
-
-      // Debug action.
-      [[eosio::action]]
-      void cleartable();
+      void addpair(const name &pair);
 
    private:
       static constexpr name system_account = "rem"_n;
@@ -85,24 +81,24 @@ namespace eosio {
          EOSLIB_SERIALIZE( pricedata, (producer)(pairs_data)(last_update))
       };
 
-      struct [[eosio::table]] suppdpairs {
+      struct [[eosio::table]] pairstable {
          std::set<name> pairs {};
 
          // explicit serialization macro is not necessary, used here only to improve compilation time
-         EOSLIB_SERIALIZE( suppdpairs, (pairs))
+         EOSLIB_SERIALIZE( pairstable, (pairs))
       };
 
       typedef multi_index< "remprice"_n, remprice>    remprice_inx;
       typedef multi_index< "pricedata"_n, pricedata>  pricedata_inx;
-      typedef singleton< "suppdpairs"_n, suppdpairs>  pairs_inx;
+      typedef singleton< "pairstable"_n, pairstable>  pairs_inx;
 
       pricedata_inx    pricedata_tbl;
       remprice_inx     remprice_tbl;
-      pairs_inx        supported_pairs_tbl;
-      suppdpairs       suppdpairs_data;
+      pairs_inx        pairs_tbl;
+      pairstable       pairstable_data;
 
-      void check_supported_pairs(const std::map<name, double> &pairs);
-      void to_rewards(const asset &quantity, const name& payer);
+      void check_pairs(const std::map<name, double> &pairs);
+      void to_rewards(const asset &quantity, const name &payer);
 
       uint8_t get_majority_amount() const;
       std::map<name, vector<double>> get_relevant_prices() const;
