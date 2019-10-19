@@ -35,7 +35,7 @@ namespace eosio {
       check(quantity.is_valid(), "invalid quantity");
       check(quantity.symbol == min_account_stake.symbol, "symbol precision mismatch");
       check(quantity.amount >= min_account_stake.amount + producers_reward.amount, "the quantity must be greater "
-                                                                                  "than the swap fee");
+                                                                                   "than the swap fee");
       time_point swap_timepoint = swap_timestamp.to_time_point();
 
       string swap_payload = join({swap_pubkey.substr(3), txid, remchain_id, quantity.to_string(), return_address,
@@ -65,8 +65,7 @@ namespace eosio {
          check(is_producer, "block producer authorization required");
          check(swap_hash_itr->status != static_cast<int8_t>(swap_status::CANCELED), "swap already canceled");
 
-         const vector <name> &approvals = swap_hash_itr->provided_approvals;
-         bool is_status_issued = swap_hash_itr->status == static_cast<int8_t>(swap_status::ISSUED);
+         const vector<name> &approvals = swap_hash_itr->provided_approvals;
          bool is_already_approved = std::find(approvals.begin(), approvals.end(), rampayer) == approvals.end();
 
          check(is_already_approved, "approval already exists");
@@ -74,8 +73,12 @@ namespace eosio {
          swap_table.modify(*swap_hash_itr, rampayer, [&](auto &s) {
             s.provided_approvals.push_back(rampayer);
          });
+      }
 
+      if (is_producer) {
          cleanup_swaps();
+         swap_hash_itr = swap_hash_idx.find(swap_data::get_swap_hash(swap_hash));
+         bool is_status_issued = swap_hash_itr->status == static_cast<int8_t>(swap_status::ISSUED);
          if (is_swap_confirmed(swap_hash_itr->provided_approvals) && !is_status_issued) {
             issue_tokens(rampayer, quantity);
             swap_table.modify(*swap_hash_itr, rampayer, [&](auto &s) {
@@ -92,13 +95,13 @@ namespace eosio {
       require_auth(rampayer);
 
       const checksum256 swap_hash = get_swap_id(
-            txid, swap_pubkey_str, quantity, return_address,
-            return_chain_id, swap_timestamp
+         txid, swap_pubkey_str, quantity, return_address,
+         return_chain_id, swap_timestamp
       );
 
       const checksum256 digest = get_digest_msg(
-            receiver, {}, {}, txid, quantity,
-            return_address, return_chain_id, swap_timestamp
+         receiver, {}, {}, txid, quantity,
+         return_address, return_chain_id, swap_timestamp
       );
 
       validate_swap(swap_hash);
@@ -129,14 +132,14 @@ namespace eosio {
       require_auth(rampayer);
 
       const checksum256 swap_hash = get_swap_id(
-            txid, swap_pubkey_str, quantity, return_address,
-            return_chain_id, swap_timestamp
+         txid, swap_pubkey_str, quantity, return_address,
+         return_chain_id, swap_timestamp
       );
 
       const checksum256 digest = get_digest_msg(
-            receiver, owner_pubkey_str, active_pubkey_str,
-            txid, quantity, return_address,
-            return_chain_id, swap_timestamp
+         receiver, owner_pubkey_str, active_pubkey_str,
+         txid, quantity, return_address,
+         return_chain_id, swap_timestamp
       );
 
       validate_swap(swap_hash);
@@ -176,8 +179,8 @@ namespace eosio {
       time_point swap_timepoint = swap_timestamp.to_time_point();
 
       const checksum256 swap_hash = get_swap_id(
-            txid, swap_pubkey_str, quantity, return_address,
-            return_chain_id, swap_timestamp
+         txid, swap_pubkey_str, quantity, return_address,
+         return_chain_id, swap_timestamp
       );
 
       auto swap_hash_idx = swap_table.get_index<"byhash"_n>();
@@ -285,9 +288,9 @@ namespace eosio {
 
    void swap::validate_address(const name &chain_id, const string &address) {
       action(
-            permission_level{_self, "active"_n},
-            "rem.utils"_n, "validateaddr"_n,
-            std::make_tuple(chain_id, address)
+         permission_level{_self, "active"_n},
+         "rem.utils"_n, "validateaddr"_n,
+         std::make_tuple(chain_id, address)
       ).send();
    }
 
@@ -342,24 +345,24 @@ namespace eosio {
                           const public_key &active_key, const asset &min_account_stake) {
 
       const eosiosystem::key_weight owner_pubkey_weight{
-            .key = owner_key,
-            .weight = 1,
+         .key = owner_key,
+         .weight = 1,
       };
       const eosiosystem::key_weight active_pubkey_weight{
-            .key = active_key,
-            .weight = 1,
+         .key = active_key,
+         .weight = 1,
       };
       const eosiosystem::authority owner{
-            .threshold = 1,
-            .keys = {owner_pubkey_weight},
-            .accounts = {},
-            .waits = {}
+         .threshold = 1,
+         .keys = {owner_pubkey_weight},
+         .accounts = {},
+         .waits = {}
       };
       const eosiosystem::authority active{
-            .threshold = 1,
-            .keys = {active_pubkey_weight},
-            .accounts = {},
-            .waits = {}
+         .threshold = 1,
+         .keys = {active_pubkey_weight},
+         .accounts = {},
+         .waits = {}
       };
 
       eosiosystem::system_contract::newaccount_action newaccount(system_account, {_self, "active"_n});
