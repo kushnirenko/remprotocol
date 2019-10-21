@@ -449,6 +449,9 @@ swap_tester::swap_tester() {
    votepro( N(b1), { N(proda), N(prodb), N(prodc), N(prodd), N(prode) } );
    // set permission @rem.code to rem.swap
    updateauth(N(rem.swap));
+   // add supported chain
+   addchain(N(rem.swap), N(ethropsten), true, true);
+   setbpreward(N(rem.swap), _core_from_string("50.0000"));
 }
 
 BOOST_AUTO_TEST_SUITE(swap_tests)

@@ -176,14 +176,9 @@ namespace eosio {
          FINISHED = 2
       };
 
-      static constexpr symbol core_symbol{"REM", 4};
       static constexpr name system_account = "rem"_n;
-      static constexpr name system_token_account = "rem.token"_n;
 
       const string remchain_id = "93ece941df27a5787a405383a66a7c26d04e80182adf504365710331ac0625a7";
-      const std::map <string, name> supported_chains = {
-         { "ETH", "ethropsten"_n },
-      };
 
       const time_point swap_lifetime = time_point(seconds(15552000)); // 180 days
       const time_point swap_active_lifetime = time_point(seconds(604800)); // 7 days
@@ -217,7 +212,7 @@ namespace eosio {
       };
 
       struct [[eosio::table]] prodsreward {
-         asset quantity{500000, core_symbol};
+         asset quantity;
 
          // explicit serialization macro is not necessary, used here only to improve compilation time
          EOSLIB_SERIALIZE( prodsreward, (quantity))
@@ -241,6 +236,7 @@ namespace eosio {
 
       typedef singleton<"prodsreward"_n, prodsreward> p_reward;
       p_reward p_reward_table;
+      prodsreward p_reward_data;
 
       typedef multi_index<"chains"_n, chains> chains_index;
       chains_index chains_table;
@@ -261,8 +257,6 @@ namespace eosio {
       checksum256 sha256(const string &str) const {
          return eosio::sha256(str.c_str(), str.size());
       }
-
-      void add_chain(const name &chain_id, const bool &input, const bool &output);
 
       void to_rewards(const asset &quantity);
       void retire_tokens(const asset &quantity, const string &memo);

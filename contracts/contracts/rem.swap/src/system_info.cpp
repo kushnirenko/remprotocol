@@ -6,6 +6,8 @@
 
 namespace eosio {
 
+   using eosiosystem::system_contract;
+
    struct [[eosio::table("global"), eosio::contract("rem.system")]] eosio_global_state : eosio::blockchain_parameters {
       uint64_t free_ram()const { return max_ram_size - total_ram_bytes_reserved; }
 
@@ -60,7 +62,7 @@ namespace eosio {
    asset swap::get_min_account_stake() {
       global_state_singleton global( system_account, system_account.value );
       auto _gstate = global.get();
-      return { static_cast<int64_t>( _gstate.min_account_stake ), core_symbol };
+      return { static_cast<int64_t>( _gstate.min_account_stake ), system_contract::get_core_symbol() };
    }
 
    asset swap::get_swapbot_fee(const name &chain_id) const {
