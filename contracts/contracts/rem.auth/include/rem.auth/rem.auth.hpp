@@ -30,9 +30,7 @@ namespace eosio {
     */
    class [[eosio::contract("rem.auth")]] auth : public contract {
    public:
-
-      auth(name receiver, name code,  datastream<const char*> ds)
-      :contract(receiver, code, ds), authkeys_tbl(_self, _self.value) {};
+      auth(name receiver, name code, datastream<const char*> ds);
 
       /**
        * Add new authentication key action.
@@ -123,8 +121,15 @@ namespace eosio {
       void transfer(const name &from, const name &to, const asset &quantity,
                     const string &key_str, const signature &signed_by_key);
 
+      /**
+       * Set storage fee action.
+       *
+       * @details Allows change storage fee, action permitted producers.
+       *
+       * @param quantity - the quantity of tokens to be set.
+       */
       [[eosio::action]]
-      void cleartable( );
+      void setstoragefee(const asset &quantity);
 
       using addkeyacc_action = action_wrapper<"addkeyacc"_n, &auth::addkeyacc>;
       using addkeyapp_action = action_wrapper<"addkeyapp"_n, &auth::addkeyapp>;
@@ -132,33 +137,30 @@ namespace eosio {
       using revokeapp_action = action_wrapper<"revokeapp"_n, &auth::revokeapp>;
       using buyauth_action = action_wrapper<"buyauth"_n, &auth::buyauth>;
       using transfer_action = action_wrapper<"transfer"_n, &auth::transfer>;
+      using setstoragefee_action = action_wrapper<"setstoragefee"_n, &auth::setstoragefee>;
 
    private:
       static constexpr symbol auth_symbol{"AUTH", 4};
-      const asset key_store_price{10000, auth_symbol};
-
       static constexpr name system_account = "rem"_n;
 
       const time_point key_lifetime = time_point(seconds(31104000)); // 360 days
 
       struct [[eosio::table]] authkeys {
-         uint64_t          N;
+         uint64_t          key;
          name              owner;
-         public_key        key;
-         string            extra_key;
+         public_key        public_key;
+         string            extra_public_key;
          block_timestamp   not_valid_before;
          block_timestamp   not_valid_after;
          uint32_t          revoked_at;
 
-         uint64_t primary_key() const { return N; }
-         uint64_t by_name() const { return owner.value; }
+         uint64_t primary_key() const { return key; }
+         uint64_t by_not_valid_before() const { return not_valid_before.to_time_point().elapsed.count(); }
+         uint64_t by_not_valid_after() const { return not_valid_after.to_time_point().elapsed.count(); }
+         uint64_t by_revoked() const { return revoked_at; }
 
-         EOSLIB_SERIALIZE( authkeys, (N)(owner)(key)(extra_key)(not_valid_before)(not_valid_after)(revoked_at))
+         EOSLIB_SERIALIZE( authkeys, (key)(owner)(public_key)(extra_public_key)(not_valid_before)(not_valid_after)(revoked_at))
       };
-
-      typedef multi_index<"authkeys"_n, authkeys,
-                          indexed_by<"byname"_n, const_mem_fun < authkeys, uint64_t, &authkeys::by_name>>
-                          > authkeys_inx;
 
       struct [[eosio::table]] account {
          asset    balance;
@@ -166,19 +168,32 @@ namespace eosio {
          uint64_t primary_key()const { return balance.symbol.code().raw(); }
       };
 
-      typedef multi_index<"accounts"_n, account> accounts;
+      struct [[eosio::table]] storageprice {
+         asset    quantity;
 
-      authkeys_inx authkeys_tbl;
+         EOSLIB_SERIALIZE( storageprice, (quantity) )
+      };
+
+      typedef singleton<"storageprice"_n, storageprice> storage_price_idx;
+
+      storage_price_idx storage_price_table;
+      storageprice storage_price_data;
+
+      typedef multi_index<"accounts"_n, account> accounts;
+      typedef multi_index<"authkeys"_n, authkeys,
+            indexed_by<"bynotvalbfr"_n, const_mem_fun <authkeys, uint64_t, &authkeys::by_not_valid_before>>,
+            indexed_by<"bynotvalaftr"_n, const_mem_fun <authkeys, uint64_t, &authkeys::by_not_valid_after>>,
+            indexed_by<"byrevoked"_n, const_mem_fun <authkeys, uint64_t, &authkeys::by_revoked>>
+            > authkeys_idx;
 
       void sub_storage_fee(const name &account, const asset &price_limit);
-      void revoke_key(const name &account, const public_key &key);
 
       void issue_tokens(const asset &quantity);
       void retire_tokens(const asset &quantity);
       void transfer_tokens(const name &from, const name &to, const asset &quantity, const string &memo);
       void to_rewards(const name& payer, const asset &quantity);
 
-      auto get_authkey_it(const name &account, const public_key &key);
+      auto get_authkey_it(const authkeys_idx &authkeys_tbl, const name &account, const public_key &key);
       asset get_balance( const name& token_contract_account, const name& owner, const symbol& sym );
       asset get_authrem_price(const asset &quantity);
 
