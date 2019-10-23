@@ -51,7 +51,7 @@ class rem_oracle_plugin_impl {
      void start_monitor() {
        while(true) {
          try {
-           wlog("price monitor started");
+           ilog("price monitor started");
            std::map<std::string, double> coingecko_prices;
            std::map<std::string, double> cryptocompare_prices;
            std::map<name, double> average_prices;
@@ -59,7 +59,7 @@ class rem_oracle_plugin_impl {
 
            for(size_t i = 0; i < 3; i++) {
              coingecko_prices[ currencies[i] ] = get_coingecko_rem_price(coingecko_host, coingecko_endpoint, (currencies[i] == "USD" ? "USDT" : currencies[i].c_str()) );
-             wlog("avg ${c} coingecko: ${p}", ("c", currencies[i])("p", coingecko_prices[ currencies[i] ]));
+             ilog("avg ${c} coingecko: ${p}", ("c", currencies[i])("p", coingecko_prices[ currencies[i] ]));
 
              cryptocompare_prices[ currencies[i] ] = 0;
 
@@ -67,12 +67,12 @@ class rem_oracle_plugin_impl {
                cryptocompare_prices[ currencies[i] ] = get_cryptocompare_rem_price(cryptocompare_host,
                                                                        (string(cryptocompare_endpoint)+string(cryptocompare_params)+_cryptocompare_apikey).c_str(),
                                                                         currencies[i].c_str());
-               wlog("avg ${c} cryptocompare: ${p}", ("c", currencies[i])("p", cryptocompare_prices[ currencies[i] ]));
+               ilog("avg ${c} cryptocompare: ${p}", ("c", currencies[i])("p", cryptocompare_prices[ currencies[i] ]));
              }
              int count = (coingecko_prices[ currencies[i] ] == 0 ? 0 : 1) + (cryptocompare_prices[ currencies[i] ] == 0 ? 0 : 1);
              double price_sum = (coingecko_prices[ currencies[i] ] == 0 ? 0 : coingecko_prices[ currencies[i] ]) +
                                 (cryptocompare_prices[ currencies[i] ] == 0 ? 0 : cryptocompare_prices[ currencies[i] ]);
-             average_prices[ N(boost::algorithm::to_lower_copy("REM." + currencies[i])) ] = price_sum / count;
+             average_prices[ eosio::chain::string_to_name(boost::algorithm::to_lower_copy("REM." + currencies[i]).c_str()) ] = price_sum / count;
            }
 
            this->push_set_price_transaction(average_prices);
@@ -145,7 +145,6 @@ class rem_oracle_plugin_impl {
          auto chainid = app().get_plugin<chain_plugin>().get_chain_id();
 
          signed_transaction trx;
-
          trx.actions.emplace_back(vector<chain::permission_level>{{this->_oracle_signing_account,this->_oracle_signing_permission}},
            setprice{this->_oracle_signing_account,
              pairs_data});
