@@ -121,9 +121,9 @@ public:
                   const vector<permission_level> &auths) {
       auto r = base_tester::push_action(N(rem.auth), N(addkeyacc), auths, mvo()
          ("account",  account)
-         ("key_str", key )
-         ("signed_by_key", signed_by_key )
-         ("extra_key", extra_key )
+         ("pub_key_str", key )
+         ("signed_by_pub_key", signed_by_key )
+         ("extra_pub_key", extra_key )
          ("price_limit", price_limit )
          ("payer_str", payer_str )
       );
@@ -136,11 +136,11 @@ public:
                   const asset &price_limit, const string &payer_str, const vector<permission_level> &auths) {
       auto r = base_tester::push_action(N(rem.auth), N(addkeyapp), auths, mvo()
          ("account",  account)
-         ("new_key_str", new_key )
-         ("signed_by_new_key", signed_by_new_key )
-         ("extra_key", extra_key )
-         ("key_str", key )
-         ("signed_by_key", signed_by_key )
+         ("new_pub_key_str", new_key )
+         ("signed_by_new_pub_key", signed_by_new_key )
+         ("extra_pub_key", extra_key )
+         ("pub_key_str", key )
+         ("signed_by_pub_key", signed_by_key )
          ("price_limit", price_limit )
          ("payer_str", payer_str )
       );
@@ -151,7 +151,7 @@ public:
    auto revokeacc(const name &account, const crypto::public_key &key, const vector<permission_level>& auths) {
       auto r = base_tester::push_action(N(rem.auth), N(revokeacc), auths, mvo()
          ("account",  account)
-         ("key_str", key )
+         ("pub_key_str", key )
       );
       produce_block();
       return r;
@@ -161,9 +161,9 @@ public:
                   const crypto::signature &signed_by_key, const vector<permission_level>& auths) {
       auto r = base_tester::push_action(N(rem.auth), N(revokeapp), auths, mvo()
          ("account",  account)
-         ("revocation_key_str", revoke_key )
-         ("key_str", key )
-         ("signed_by_key", signed_by_key )
+         ("revocation_pub_key_str", revoke_key )
+         ("pub_key_str", key )
+         ("signed_by_pub_key", signed_by_key )
       );
       produce_block();
       return r;
@@ -1189,7 +1189,7 @@ BOOST_FIXTURE_TEST_CASE( revokedapp_test, rem_auth_tester ) {
       revokeapp_digest = sha256::hash(join( { account.to_string(), string(nonexistkey_pub), string(revoke_key_pub) }));
       signed_by_revkey = revoke_key_priv.sign(revokeapp_digest);
       BOOST_REQUIRE_THROW(
-         revokeapp(account, nonexistkey_pub, revoke_key_pub,signed_by_revkey, auths_level), eosio_assert_message_exception
+         revokeapp(account, nonexistkey_pub, revoke_key_pub, signed_by_revkey, auths_level), eosio_assert_message_exception
       );
       // account has no active app keys (revoke again same key)
       revokeapp_digest = sha256::hash(join( { account.to_string(), string(revoke_key_pub), string(revoke_key_pub) } ));

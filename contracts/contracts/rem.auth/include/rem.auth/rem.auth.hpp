@@ -9,7 +9,6 @@
 #include <eosio/eosio.hpp>
 #include <eosio/permission.hpp>
 #include <eosio/singleton.hpp>
-#include <eosio/transaction.hpp>
 
 #include <numeric>
 
@@ -38,15 +37,15 @@ namespace eosio {
        * @details Add new authentication key by user account.
        *
        * @param account - the owner account to execute the addkeyacc action for,
-       * @param key_str - the public key that signed the payload,
-       * @param signed_by_key - the signature that was signed by key_str,
+       * @param pub_key_str - the public key that signed the payload,
+       * @param signed_by_pub_key - the signature that was signed by pub_key_str,
        * @param price_limit - the maximum price which will be charged for storing the key can be in REM and AUTH,
-       * @param extra_key - the public key for authorization in external services,
+       * @param extra_pub_key - the public key for authorization in external services,
        * @param payer_str - the account from which resources are debited.
        */
       [[eosio::action]]
-      void addkeyacc(const name &account, const string &key_str, const signature &signed_by_key,
-                     const string &extra_key, const asset &price_limit,const string &payer_str);
+      void addkeyacc(const name &account, const string &pub_key_str, const signature &signed_by_pub_key,
+                     const string &extra_pub_key, const asset &price_limit, const string &payer_str);
 
       /**
        * Add new authentication key action.
@@ -54,17 +53,17 @@ namespace eosio {
        * @details Add new authentication key by using correspond to account authentication key.
        *
        * @param account - the owner account to execute the addkeyacc action for,
-       * @param new_key_str - the public key that will be added,
-       * @param signed_by_new_key - the signature that was signed by new_key_str,
-       * @param extra_key - the public key for authorization in external services,
-       * @param key_str - the public key which is tied to the corresponding account,
-       * @param sign_by_key - the signature that was signed by key_str,
+       * @param new_pub_key_str - the public key that will be added,
+       * @param signed_by_new_pub_key - the signature that was signed by new_pub_key_str,
+       * @param extra_pub_key - the public key for authorization in external services,
+       * @param pub_key_str - the public key which is tied to the corresponding account,
+       * @param sign_by_key - the signature that was signed by pub_key_str,
        * @param price_limit - the maximum price which will be charged for storing the key can be in REM and AUTH,
        * @param payer_str - the account from which resources are debited.
        */
       [[eosio::action]]
-      void addkeyapp(const name &account, const string &new_key_str, const signature &signed_by_new_key,
-                     const string &extra_key, const string &key_str, const signature &signed_by_key,
+      void addkeyapp(const name &account, const string &new_pub_key_str, const signature &signed_by_new_pub_key,
+                     const string &extra_pub_key, const string &pub_key_str, const signature &signed_by_pub_key,
                      const asset &price_limit, const string &payer_str);
 
       /**
@@ -73,10 +72,10 @@ namespace eosio {
        * @details Revoke already added active authentication key by user account.
        *
        * @param account - the owner account to execute the revokeacc action for,
-       * @param key_str - the public key to be revoked on the corresponding account.
+       * @param pub_key_str - the public key to be revoked on the corresponding account.
        */
       [[eosio::action]]
-      void revokeacc(const name &account, const string &key_str);
+      void revokeacc(const name &account, const string &pub_key_str);
 
       /**
        * Revoke active authentication key action.
@@ -84,13 +83,13 @@ namespace eosio {
        * @details Revoke already added active authentication key by using correspond to account authentication key.
        *
        * @param account - the owner account to execute the revokeacc action for,
-       * @param revoke_key_str - the public key to be revoked on the corresponding account,
-       * @param key_str - the public key which is tied to the corresponding account,
-       * @param signed_by_key - the signature that was signed by key_str.
+       * @param revoke_pub_key_str - the public key to be revoked on the corresponding account,
+       * @param pub_key_str - the public key which is tied to the corresponding account,
+       * @param signed_by_pub_key - the signature that was signed by pub_key_str.
        */
       [[eosio::action]]
-      void revokeapp(const name &account, const string &revocation_key_str,
-                     const string &key_str, const signature &signed_by_key);
+      void revokeapp(const name &account, const string &revocation_pub_key_str,
+                     const string &pub_key_str, const signature &signed_by_pub_key);
 
       /**
        * Buy AUTH credits action.
@@ -114,12 +113,12 @@ namespace eosio {
        * @param from - the account to transfer from,
        * @param to - the account to be transferred to,
        * @param quantity - the quantity of tokens to be transferred,
-       * @param key_str - the public key which is tied to the corresponding account,
-       * @param signed_by_key - the signature that was signed by key_str,
+       * @param pub_key_str - the public key which is tied to the corresponding account,
+       * @param signed_by_pub_key - the signature that was signed by pub_key_str,
        */
       [[eosio::action]]
       void transfer(const name &from, const name &to, const asset &quantity,
-                    const string &key_str, const signature &signed_by_key);
+                    const string &pub_key_str, const signature &signed_by_pub_key);
 
       /**
        * Set storage fee action.
