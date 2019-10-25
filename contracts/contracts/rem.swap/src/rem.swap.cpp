@@ -15,9 +15,12 @@ namespace eosio {
 
    swap::swap(name receiver, name code,  datastream<const char*> ds) : contract(receiver, code, ds),
    swap_table(_self, _self.value),
-   p_reward_table(_self, _self.value),
+   swap_params_table(_self, _self.value),
    chains_table(_self, _self.value) {
-      p_reward_data = p_reward_table.exists() ? p_reward_table.get() : prodsreward{};
+      if (!swap_params_table.exists()) {
+         swap_params_table.set(swapparams{}, system_account);
+      }
+      swap_params_data = swap_params_table.get();
    }
 
    void swap::init(const name &rampayer, const string &txid, const string &swap_pubkey,
@@ -26,7 +29,7 @@ namespace eosio {
       require_auth(rampayer);
 
       const asset min_account_stake = get_min_account_stake();
-      const asset producers_reward = p_reward_data.quantity;
+      const asset producers_reward(swap_params_data.swap_fee, system_contract::get_core_symbol() );
 
       check_pubkey_prefix(swap_pubkey);
       check(quantity.is_valid(), "invalid quantity");
@@ -35,8 +38,8 @@ namespace eosio {
                                                                                    "than the swap fee");
       time_point swap_timepoint = swap_timestamp.to_time_point();
 
-      string swap_payload = join({swap_pubkey.substr(3), txid, remchain_id, quantity.to_string(), return_address,
-                                  return_chain_id, std::to_string(swap_timepoint.sec_since_epoch())});
+      string swap_payload = join({swap_pubkey.substr(3), txid, swap_params_data.remchain_id, quantity.to_string(),
+                                  return_address, return_chain_id, std::to_string(swap_timepoint.sec_since_epoch())});
 
       checksum256 swap_hash = sha256(swap_payload);
 
@@ -111,7 +114,7 @@ namespace eosio {
       check(time_point_sec(current_time_point()) < swap_timepoint + swap_active_lifetime,
             "swap has to be canceled after expiration");
 
-      const asset producers_reward = p_reward_data.quantity;
+      const asset producers_reward(swap_params_data.swap_fee, system_contract::get_core_symbol());
       quantity.amount -= producers_reward.amount;
       to_rewards(producers_reward);
       transfer(receiver, quantity);
@@ -152,7 +155,7 @@ namespace eosio {
       public_key owner_key = string_to_public_key(owner_pubkey_str);
       public_key active_key = string_to_public_key(active_pubkey_str);
       const asset min_account_stake = get_min_account_stake();
-      const asset producers_reward = p_reward_data.quantity;
+      const asset producers_reward(swap_params_data.swap_fee, system_contract::get_core_symbol());
 
       quantity.amount -= (min_account_stake.amount + producers_reward.amount);
 
@@ -187,7 +190,7 @@ namespace eosio {
       check(time_point_sec(current_time_point()) > swap_timepoint + swap_active_lifetime,
             "swap has to be canceled after expiration");
 
-      const asset producers_reward = p_reward_data.quantity;
+      const asset producers_reward(swap_params_data.swap_fee, system_contract::get_core_symbol());
       quantity.amount -= producers_reward.amount;
 
       string retire_memo = return_chain_id + ' ' + return_address;
@@ -200,13 +203,20 @@ namespace eosio {
       });
    }
 
-   void swap::setbpreward(const name &rampayer, const asset &quantity) {
+   void swap::setswapfee(const int64_t &amount) {
       require_auth( _self );
-      check(quantity.symbol == system_contract::get_core_symbol(), "symbol precision mismatch");
-      check(quantity.amount > 0, "amount must be a positive");
+      check(amount > 0, "amount must be a positive");
 
-      p_reward_data.quantity = quantity;
-      p_reward_table.set(p_reward_data, rampayer);
+      swap_params_data.swap_fee = amount;
+      swap_params_table.set(swap_params_data, same_payer);
+   }
+
+   void swap::setremchainid(const string &remchain_id) {
+      require_auth( _self );
+      check(!remchain_id.empty(), "invalid chain-id");
+
+      swap_params_data.remchain_id = remchain_id;
+      swap_params_table.set(swap_params_data, same_payer);
    }
 
    void swap::addchain(const name &chain_id, const bool &input, const bool &output) {
@@ -233,8 +243,8 @@ namespace eosio {
 
       time_point swap_timepoint = swap_timestamp.to_time_point();
 
-      string swap_payload = join({swap_pubkey_str.substr(3), txid, remchain_id, quantity.to_string(), return_address,
-                                  return_chain_id, std::to_string(swap_timepoint.sec_since_epoch())});
+      string swap_payload = join({swap_pubkey_str.substr(3), txid, swap_params_data.remchain_id, quantity.to_string(),
+                                  return_address, return_chain_id, std::to_string(swap_timepoint.sec_since_epoch())});
 
       checksum256 swap_hash = sha256(swap_payload);
 
@@ -248,7 +258,7 @@ namespace eosio {
 
       time_point swap_timepoint = swap_timestamp.to_time_point();
 
-      string payload = join({txid, remchain_id, quantity.to_string(), return_address,
+      string payload = join({txid, swap_params_data.remchain_id, quantity.to_string(), return_address,
                              return_chain_id, std::to_string(swap_timepoint.sec_since_epoch())});
 
       string sign_payload = (owner_key.size() == 0) ? join({receiver.to_string(), payload}) :
@@ -316,13 +326,11 @@ namespace eosio {
       string return_address = memo.substr(space_pos + 1);
       check(return_address.size() > 0, "wrong address");
 
-      validate_address(name(return_chain_id), return_address);
+//      validate_address(name(return_chain_id), return_address);
 
-      asset swapbot_fee = get_swapbot_fee(name(return_chain_id));
+//      asset swapbot_fee = get_swapbot_fee(name(return_chain_id));
       check(quantity.symbol == system_contract::get_core_symbol(), "symbol precision mismatch");
-      check(quantity.amount > swapbot_fee.amount, "the quantity must be greater than the swap fee");
-
-      quantity.amount -= swapbot_fee.amount;
+//      check(quantity.amount > swapbot_fee.amount, "the quantity must be greater than the swap fee");
 
       string retire_memo = return_chain_id + ' ' + return_address;
       retire_tokens(quantity, retire_memo);

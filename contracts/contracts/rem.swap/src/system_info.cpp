@@ -94,13 +94,6 @@ namespace eosio {
 //      return false;
    }
 
-   string swap::join( vector<string>&& vec, string delim ) const {
-      return std::accumulate(std::next(vec.begin()), vec.end(), vec[0],
-                            [&delim](string& a, string& b) {
-                              return a + delim + b;
-                            });
-   }
-
    void swap::check_pubkey_prefix(const string& pubkey_str) const {
       string pubkey_pre = pubkey_str.substr(0, 3);
       check(pubkey_pre == "EOS" || pubkey_pre == "REM", "invalid type of public key");
