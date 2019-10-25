@@ -142,6 +142,7 @@ namespace eosio {
       static constexpr symbol auth_symbol{"AUTH", 4};
       static constexpr name system_account = "rem"_n;
 
+      const asset key_store_price{10000, auth_symbol};
       const time_point key_lifetime = time_point(seconds(31104000)); // 360 days
 
       struct [[eosio::table]] authkeys {

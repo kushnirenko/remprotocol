@@ -160,16 +160,6 @@ namespace eosio {
       transfer_tokens(get_self(), account, quantity, "buying an auth token");
    }
 
-   void auth::setstoragefee(const asset &quantity) {
-      require_auth(get_self());
-      check(quantity.is_valid(), "invalid quantity");
-      check(quantity.amount > 0, "quantity should be a positive value");
-      check(quantity.symbol == auth_symbol, "symbol precision mismatch");
-
-      storage_price_data.quantity = quantity;
-      storage_price_table.set(storage_price_data, get_self());
-   }
-
    void auth::sub_storage_fee(const name &account, const asset &price_limit)
    {
       bool is_pay_by_auth = price_limit.symbol == auth_symbol;
@@ -186,14 +176,14 @@ namespace eosio {
       asset rem_balance = get_balance(system_contract::token_account, get_self(), system_contract::get_core_symbol());
 
       if (is_pay_by_rem) {
-         authrem_price = get_authrem_price(storage_price_data.quantity);
+         authrem_price = get_authrem_price(key_store_price);
          check(authrem_price < price_limit, "currently rem-usd price is above price limit");
-         buyauth_unit_price = storage_price_data.quantity;
+         buyauth_unit_price = key_store_price;
          transfer_tokens(account, get_self(), authrem_price, "purchase fee REM tokens");
       } else {
          check(auth_credit_supply.amount > 0, "overdrawn balance");
-         transfer_tokens(account, get_self(), storage_price_data.quantity, "purchase fee AUTH tokens");
-         retire_tokens(storage_price_data.quantity);
+         transfer_tokens(account, get_self(), key_store_price, "purchase fee AUTH tokens");
+         retire_tokens(key_store_price);
       }
 
       double reward_amount = (rem_balance.amount + authrem_price.amount) /
