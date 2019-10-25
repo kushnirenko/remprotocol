@@ -68,8 +68,14 @@ class rem_oracle_plugin_impl {
                                                                        (string(cryptocompare_endpoint)+string(cryptocompare_params)+_cryptocompare_apikey).c_str(),
                                                                         currencies[i].c_str());
                ilog("avg ${c} cryptocompare: ${p}", ("c", currencies[i])("p", cryptocompare_prices[ currencies[i] ]));
+             } else {
+                wlog("cryptocompare-apikey is not set");
              }
              int count = (coingecko_prices[ currencies[i] ] == 0 ? 0 : 1) + (cryptocompare_prices[ currencies[i] ] == 0 ? 0 : 1);
+             if( count == 0 ) {
+               elog("Can't retrieve REM token price data neither from https://www.cryptocompare.com/ not from https://www.coingecko.com/en");
+               continue;
+             }
              double price_sum = (coingecko_prices[ currencies[i] ] == 0 ? 0 : coingecko_prices[ currencies[i] ]) +
                                 (cryptocompare_prices[ currencies[i] ] == 0 ? 0 : cryptocompare_prices[ currencies[i] ]);
              average_prices[ eosio::chain::string_to_name(boost::algorithm::to_lower_copy("REM." + currencies[i]).c_str()) ] = price_sum / count;
@@ -78,7 +84,7 @@ class rem_oracle_plugin_impl {
            this->push_set_price_transaction(average_prices);
 
            sleep(update_price_period);
-         } FC_LOG_AND_RETHROW()
+         } FC_LOG_WAIT_AND_CONTINUE()
        }
      }
 
@@ -95,45 +101,53 @@ class rem_oracle_plugin_impl {
      }
 
      double get_coingecko_rem_price(const char* coingecko_host, const char* remme_endpoint, const char* to_currency) {
-         std::string response = make_request(coingecko_host, remme_endpoint);
+         try {
+           std::string response = make_request(coingecko_host, remme_endpoint);
 
-         boost::iostreams::stream<boost::iostreams::array_source> stream(response.c_str(), response.size());
-         namespace pt = boost::property_tree;
-         pt::ptree root;
-         pt::read_json(stream, root);
-         double sum = 0;
-         int counter = 0;
-         for (pt::ptree::value_type &log : root.get_child("tickers")) {
-             //const std::string& key = log.first; // key
-             const boost::property_tree::ptree& subtree = log.second;
+           boost::iostreams::stream<boost::iostreams::array_source> stream(response.c_str(), response.size());
+           namespace pt = boost::property_tree;
+           pt::ptree root;
+           pt::read_json(stream, root);
+           double sum = 0;
+           int counter = 0;
+           for (pt::ptree::value_type &log : root.get_child("tickers")) {
+               //const std::string& key = log.first; // key
+               const boost::property_tree::ptree& subtree = log.second;
 
-             boost::optional<std::string> target_opt = subtree.get_optional<std::string>("target");
-             boost::optional<std::string> last_opt = subtree.get_optional<std::string>("last");
-             //boost::optional<std::string> txid_opt = subtree.get_optional<std::string>("transactionHash");
-             //cout << "t2: " << data_opt.get() << endl;
+               boost::optional<std::string> target_opt = subtree.get_optional<std::string>("target");
+               boost::optional<std::string> last_opt = subtree.get_optional<std::string>("last");
+               //boost::optional<std::string> txid_opt = subtree.get_optional<std::string>("transactionHash");
+               //cout << "t2: " << data_opt.get() << endl;
 
-             if(target_opt && target_opt.get() == to_currency) {
-                 sum += boost::lexical_cast<double>(last_opt.get());
-                 counter++;
-             }
-             else
-                 continue;
+               if(target_opt && target_opt.get() == to_currency) {
+                   sum += boost::lexical_cast<double>(last_opt.get());
+                   counter++;
+               }
+               else
+                   continue;
+           }
+           return sum/counter;
+         } catch (...) {
+            return 0;
          }
-         return sum/counter;
      }
 
      double get_cryptocompare_rem_price(const char* cryptocompare_host, const char* cryptocompare_endpoint, const char* to_currency) {
-         std::string response = make_request(cryptocompare_host, cryptocompare_endpoint);
+         try {
+           std::string response = make_request(cryptocompare_host, cryptocompare_endpoint);
 
-         boost::iostreams::stream<boost::iostreams::array_source> stream(response.c_str(), response.size());
-         namespace pt = boost::property_tree;
-         pt::ptree root;
-         pt::read_json(stream, root);
-         boost::optional<double> price_opt = root.get_optional<double>(to_currency);
-         if (price_opt)
-             return price_opt.get();
-         else
-             return 0;
+           boost::iostreams::stream<boost::iostreams::array_source> stream(response.c_str(), response.size());
+           namespace pt = boost::property_tree;
+           pt::ptree root;
+           pt::read_json(stream, root);
+           boost::optional<double> price_opt = root.get_optional<double>(to_currency);
+           if (price_opt)
+               return price_opt.get();
+           else
+               return 0;
+         } catch (...) {
+            return 0;
+         }
 
      }
 
