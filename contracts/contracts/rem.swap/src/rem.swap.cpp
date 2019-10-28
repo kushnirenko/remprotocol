@@ -29,7 +29,7 @@ namespace eosio {
       require_auth(rampayer);
 
       const asset min_account_stake = get_min_account_stake();
-      const asset producers_reward(swap_params_data.swap_fee, system_contract::get_core_symbol() );
+      const asset producers_reward(swap_params_data.in_swap_fee, system_contract::get_core_symbol() );
 
       check_pubkey_prefix(swap_pubkey);
       check(quantity.is_valid(), "invalid quantity");
@@ -114,7 +114,7 @@ namespace eosio {
       check(time_point_sec(current_time_point()) < swap_timepoint + swap_active_lifetime,
             "swap has to be canceled after expiration");
 
-      const asset producers_reward(swap_params_data.swap_fee, system_contract::get_core_symbol());
+      const asset producers_reward(swap_params_data.in_swap_fee, system_contract::get_core_symbol());
       quantity.amount -= producers_reward.amount;
       to_rewards(producers_reward);
       transfer(receiver, quantity);
@@ -155,7 +155,7 @@ namespace eosio {
       public_key owner_key = string_to_public_key(owner_pubkey_str);
       public_key active_key = string_to_public_key(active_pubkey_str);
       const asset min_account_stake = get_min_account_stake();
-      const asset producers_reward(swap_params_data.swap_fee, system_contract::get_core_symbol());
+      const asset producers_reward(swap_params_data.in_swap_fee, system_contract::get_core_symbol());
 
       quantity.amount -= (min_account_stake.amount + producers_reward.amount);
 
@@ -190,7 +190,7 @@ namespace eosio {
       check(time_point_sec(current_time_point()) > swap_timepoint + swap_active_lifetime,
             "swap has to be canceled after expiration");
 
-      const asset producers_reward(swap_params_data.swap_fee, system_contract::get_core_symbol());
+      const asset producers_reward(swap_params_data.in_swap_fee, system_contract::get_core_symbol());
       quantity.amount -= producers_reward.amount;
 
       string retire_memo = return_chain_id + ' ' + return_address;
@@ -207,7 +207,15 @@ namespace eosio {
       require_auth( _self );
       check(amount > 0, "amount must be a positive");
 
-      swap_params_data.swap_fee = amount;
+      swap_params_data.in_swap_fee = amount;
+      swap_params_table.set(swap_params_data, same_payer);
+   }
+
+   void swap::setoutswpamt(const int64_t &amount) {
+      require_auth( _self );
+      check(amount > 0, "amount must be a positive");
+
+      swap_params_data.out_swap_min_amount = amount;
       swap_params_table.set(swap_params_data, same_payer);
    }
 
@@ -326,11 +334,11 @@ namespace eosio {
       string return_address = memo.substr(space_pos + 1);
       check(return_address.size() > 0, "wrong address");
 
-//      validate_address(name(return_chain_id), return_address);
+      validate_address(name(return_chain_id), return_address);
 
 //      asset swapbot_fee = get_swapbot_fee(name(return_chain_id));
       check(quantity.symbol == system_contract::get_core_symbol(), "symbol precision mismatch");
-//      check(quantity.amount > swapbot_fee.amount, "the quantity must be greater than the swap fee");
+      check(quantity.amount >= swap_params_data.out_swap_min_amount, "the quantity must be greater than the swap minimum amount");
 
       string retire_memo = return_chain_id + ' ' + return_address;
       retire_tokens(quantity, retire_memo);
