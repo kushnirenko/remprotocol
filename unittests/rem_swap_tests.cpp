@@ -169,7 +169,7 @@ public:
                   const block_timestamp_type &swap_timestamp) {
 
       auto r = base_tester::push_action(N(rem.swap), N(init), rampayer, mvo()
-         ("rampayer", name(rampayer))
+         ("rampayer", rampayer)
          ("txid", txid)
          ("swap_pubkey", swap_pubkey)
          ("quantity", quantity)
@@ -259,6 +259,15 @@ public:
       return r;
    }
 
+   auto setoutswpamt(const int64_t &amount) {
+      vector<permission_level> level = {{N(rem.swap), config::active_name}, {N(rem), config::active_name}};
+      auto r = base_tester::push_action(N(rem.swap), N(setoutswpamt), level, mvo()
+         ("amount", amount)
+      );
+      produce_block();
+      return r;
+   }
+
    auto setremchainid(const string &remchain_id) {
       vector<permission_level> level = {{N(rem.swap), config::active_name}, {N(rem), config::active_name}};
       auto r = base_tester::push_action(N(rem.swap), N(setremchainid), level, mvo()
@@ -290,7 +299,7 @@ public:
    };
 
    auto updateauth(const name &account) {
-      auto auth = authority(testing::base_tester::get_public_key(account.to_string(), "active"));
+      auto auth = authority(get_public_key(account, "active"));
       auth.accounts.push_back(permission_level_weight{{account, config::rem_code_name}, 1});
 
       auto r = base_tester::push_action(N(rem), N(updateauth), account, mvo()
@@ -333,7 +342,7 @@ public:
    }
 
    asset get_swap_fee() {
-      auto swap_fee = get_singtable(N(rem.swap), N(swapparams), "swapparams")["swap_fee"];
+      auto swap_fee = get_singtable(N(rem.swap), N(swapparams), "swapparams")["in_swap_fee"];
       return asset(swap_fee.as_int64(), CORE_SYMBOL_STR);
    }
 
@@ -375,7 +384,7 @@ public:
 swap_tester::swap_tester() {
    // Create rem.msig, rem.token and rem.swap
    create_accounts(
-      {N(rem.msig), N(rem.token), N(rem.ram), N(rem.ramfee), N(rem.stake), N(rem.bpay), N(rem.spay), N(rem.vpay),
+      {N(rem.msig), N(rem.token), N(rem.rex), N(rem.ram), N(rem.ramfee), N(rem.stake), N(rem.bpay), N(rem.spay), N(rem.vpay),
        N(rem.saving), N(rem.swap)});
 
    // Set code for the following accounts:
@@ -477,7 +486,6 @@ BOOST_FIXTURE_TEST_CASE(init_swap_test, swap_tester) {
                                   init_swap_data.quantity.to_string(), init_swap_data.return_address,
                                   init_swap_data.return_chain_id, std::to_string(swap_timepoint.sec_since_epoch()) });
 
-      BOOST_TEST_MESSAGE(swap_payload);
       string swap_id = sha256::hash(swap_payload);
       asset before_init_balance = get_balance(N(rem.swap));
 
@@ -498,7 +506,6 @@ BOOST_FIXTURE_TEST_CASE(init_swap_test, swap_tester) {
 
       data = get_singtable(N(rem.swap), N(swaps), "swap_data");
       BOOST_REQUIRE_EQUAL(init_swap_data.txid, data["txid"].as_string());
-      BOOST_TEST_MESSAGE("POINT              ");
 
       BOOST_REQUIRE_EQUAL(swap_id, data["swap_id"].as_string());
       BOOST_REQUIRE_EQUAL(string(swap_timepoint), data["swap_timestamp"].as_string());
@@ -695,7 +702,6 @@ BOOST_FIXTURE_TEST_CASE(finish_expired_swap_test, swap_tester) {
                      init_swap_data.swap_timestamp, sign),
                      eosio_assert_message_exception);
 
-      BOOST_TEST_MESSAGE(string(control->head_block_time()) );
       // swap lifetime expired if a swap_timeswamp > 180 days
       block_timestamp_type swap_expired_timestamp = time_point_sec::from_iso_string("2019-12-25T00:00:44.500");
       for (const auto &producer : producer_candidates) {
@@ -1179,56 +1185,74 @@ BOOST_FIXTURE_TEST_CASE(cancel_after_finish_swap_test, swap_tester) {
    } FC_LOG_AND_RETHROW()
 }
 
-BOOST_FIXTURE_TEST_CASE(init_return_swap_test, swap_tester) {
-   try {
-      name sender = N(whale3);
-      string return_address = "9f21f19180c8692ebaa061fd231cd1b029ff2326";
-      string return_chain_id = "ethropsten";
-      string memo = return_chain_id + ' ' + return_address;
-      asset quantity = _core_from_string("500.0000");
-
-      // add to sender unstacked tokens by transfer from rem.swap
-      transfer(N(rem.swap), sender, quantity, "initial tansfer");
-      auto remswap_before_transfer_balance = get_balance(N(rem.swap));
-      auto sender_before_transfer_balance = get_balance(sender);
-
-      transfer(sender, N(rem.swap), quantity, memo);
-
-      auto remswap_after_transfer_balance = get_balance(N(rem.swap));
-      auto sender_after_transfer_balance = get_balance(sender);
-
-      BOOST_REQUIRE_EQUAL(remswap_before_transfer_balance, remswap_after_transfer_balance);
-      BOOST_REQUIRE_EQUAL(sender_before_transfer_balance - quantity, sender_after_transfer_balance);
-
-      // invalid memo
-      BOOST_REQUIRE_THROW(transfer(sender, N(rem.swap), quantity, ""), eosio_assert_message_exception);
-      BOOST_REQUIRE_THROW(transfer(sender, N(rem.swap), quantity, return_chain_id + return_address),
-                          eosio_assert_message_exception);
-      // wrong chain id
-      BOOST_REQUIRE_THROW(transfer(sender, N(rem.swap), quantity, ' ' + return_address),
-                          eosio_assert_message_exception);
-      // wrong address
-      BOOST_REQUIRE_THROW(transfer(sender, N(rem.swap), quantity, return_chain_id + ' '),
-                          eosio_assert_message_exception);
-      // symbol precision mismatch
-      BOOST_REQUIRE_THROW(transfer(sender, N(rem.swap), asset::from_string("500.0000 SYS"), memo),
-                          eosio_assert_message_exception);
-   } FC_LOG_AND_RETHROW()
-};
-
-BOOST_FIXTURE_TEST_CASE(set_block_producers_reward_test, swap_tester) {
-   try {
-//      setbpreward(N(rem.swap), _core_from_string("100.0000"));
+//BOOST_FIXTURE_TEST_CASE(init_return_swap_test, swap_tester) {
+//   try {
+//      name sender = N(whale3);
+//      string return_address = "9f21f19180c8692ebaa061fd231cd1b029ff2326";
+//      string return_chain_id = "ethropsten";
+//      string memo = return_chain_id + ' ' + return_address;
+//      asset quantity = _core_from_string("500.0000");
 //
-////      BOOST_REQUIRE_EQUAL(get_swap_fee(), _core_from_string("100.0000"));
+//      // add to sender unstacked tokens by transfer from rem.swap
+//      transfer(N(rem.swap), sender, quantity, "initial tansfer");
+//      auto remswap_before_transfer_balance = get_balance(N(rem.swap));
+//      auto sender_before_transfer_balance = get_balance(sender);
 //
+//      transfer(sender, N(rem.swap), quantity, memo);
+//
+//      auto remswap_after_transfer_balance = get_balance(N(rem.swap));
+//      auto sender_after_transfer_balance = get_balance(sender);
+//
+//      BOOST_REQUIRE_EQUAL(remswap_before_transfer_balance, remswap_after_transfer_balance);
+//      BOOST_REQUIRE_EQUAL(sender_before_transfer_balance - quantity, sender_after_transfer_balance);
+//
+//      // invalid memo
+//      BOOST_REQUIRE_THROW(transfer(sender, N(rem.swap), quantity, ""), eosio_assert_message_exception);
+//      BOOST_REQUIRE_THROW(transfer(sender, N(rem.swap), quantity, return_chain_id + return_address),
+//                          eosio_assert_message_exception);
+//      // wrong chain id
+//      BOOST_REQUIRE_THROW(transfer(sender, N(rem.swap), quantity, ' ' + return_address),
+//                          eosio_assert_message_exception);
+//      // wrong address
+//      BOOST_REQUIRE_THROW(transfer(sender, N(rem.swap), quantity, return_chain_id + ' '),
+//                          eosio_assert_message_exception);
 //      // symbol precision mismatch
-//      BOOST_REQUIRE_THROW(setbpreward(N(rem.swap), asset::from_string("100.0000 SYS")), eosio_assert_message_exception);
-//      BOOST_REQUIRE_THROW(setbpreward(N(rem.swap), asset::from_string("100 REM")), eosio_assert_message_exception);
-//      // amount must be a positive
-//      BOOST_REQUIRE_THROW(setbpreward(N(rem.swap), asset::from_string("-100.0000 REM")), eosio_assert_message_exception);
-//      // missing required authority
-//      BOOST_REQUIRE_THROW(setbpreward(N(proda), _core_from_string("100.0000")), missing_auth_exception);
+//      BOOST_REQUIRE_THROW(transfer(sender, N(rem.swap), asset::from_string("500.0000 SYS"), memo),
+//                          eosio_assert_message_exception);
+//      // the quantity must be greater than the swap minimum amount
+//      BOOST_REQUIRE_THROW(transfer(sender, N(rem.swap), asset::from_string("250.0000 REM"), memo),
+//                          eosio_assert_message_exception);
+//   } FC_LOG_AND_RETHROW()
+//};
+
+BOOST_FIXTURE_TEST_CASE(set_swap_fee_test, swap_tester) {
+   try {
+      setswapfee(2000000);
+      auto swap_fee = get_singtable(N(rem.swap), N(swapparams), "swapparams")["in_swap_fee"];
+      BOOST_REQUIRE_EQUAL(swap_fee.as_int64(), 2000000);
+      // amount must be a positive
+      BOOST_REQUIRE_THROW(setswapfee(-1000000), eosio_assert_message_exception);
+   } FC_LOG_AND_RETHROW()
+}
+
+BOOST_FIXTURE_TEST_CASE(set_out_swap_amount_test, swap_tester) {
+   try {
+      setoutswpamt(5000000);
+      auto min_amount = get_singtable(N(rem.swap), N(swapparams), "swapparams")["out_swap_min_amount"];
+      BOOST_REQUIRE_EQUAL(min_amount.as_int64(), 5000000);
+      // amount must be a positive
+      BOOST_REQUIRE_THROW(setoutswpamt(-1000000), eosio_assert_message_exception);
+   } FC_LOG_AND_RETHROW()
+}
+
+BOOST_FIXTURE_TEST_CASE(set_remchain_id_test, swap_tester) {
+   try {
+      string expected_chain_id("0x", 32);
+      setremchainid(expected_chain_id);
+      auto chain_id = get_singtable(N(rem.swap), N(swapparams), "swapparams")["remchain_id"];
+      BOOST_REQUIRE_EQUAL(chain_id.as_string(), expected_chain_id);
+      // invalid chain-id
+      BOOST_REQUIRE_THROW(setremchainid(""), eosio_assert_message_exception);
    } FC_LOG_AND_RETHROW()
 }
 
