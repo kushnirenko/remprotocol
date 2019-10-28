@@ -1,7 +1,3 @@
-/**
- *  @file
- *  @copyright defined in eos/LICENSE.txt
- */
 #include <eosio/chain/abi_serializer.hpp>
 #include <eosio/testing/tester.hpp>
 
@@ -207,6 +203,30 @@ public:
         return expected_produced_blocks;
     }
 
+    uint32_t get_current_round_unpaid_blocks( const account_name& prod ) {
+        auto data = get_row_by_account(config::system_account_name, config::system_account_name, N(producers), prod);
+        if (data.empty()) {
+            return 0;
+        }
+
+        fc::variant v = abi_ser.binary_to_variant( "producer_info", data, abi_serializer_max_time );
+        uint32_t current_round_unpaid_blocks = 0;
+        fc::from_variant(v["current_round_unpaid_blocks"], current_round_unpaid_blocks);
+        return current_round_unpaid_blocks;
+    }
+
+    uint32_t get_unpaid_blocks( const account_name& prod ) {
+        auto data = get_row_by_account(config::system_account_name, config::system_account_name, N(producers), prod);
+        if (data.empty()) {
+            return 0;
+        }
+
+        fc::variant v = abi_ser.binary_to_variant( "producer_info", data, abi_serializer_max_time );
+        uint32_t unpaid_blocks = 0;
+        fc::from_variant(v["unpaid_blocks"], unpaid_blocks);
+        return unpaid_blocks;
+    }
+
     void set_code_abi(const account_name& account, const vector<uint8_t>& wasm, const char* abi, const private_key_type* signer = nullptr) {
        wdump((account));
         set_code(account, wasm, signer);
@@ -249,9 +269,11 @@ BOOST_AUTO_TEST_SUITE(bootseq_tests)
 
 BOOST_FIXTURE_TEST_CASE( bootseq_test, bootseq_tester ) {
     try {
-
         // Create rem.msig and rem.token
-        create_accounts({N(rem.msig), N(rem.token), N(rem.ram), N(rem.ramfee), N(rem.stake), N(rem.vpay), N(rem.spay), N(rem.saving) });
+        create_accounts({N(rem.msig), N(rem.token), N(rem.rex), N(rem.ram),
+                         N(rem.ramfee), N(rem.stake), N(rem.bpay),
+                         N(rem.spay), N(rem.vpay), N(rem.saving)});
+
         // Set code for the following accounts:
         //  - rem (code: rem.bios) (already set by tester constructor)
         //  - rem.msig (code: rem.msig)
@@ -353,7 +375,7 @@ BOOST_FIXTURE_TEST_CASE( bootseq_test, bootseq_tester ) {
         produce_blocks_for_n_rounds(2); // 2 rounds since new producer schedule is set when the first block of next round is irreversible
         auto active_schedule = control->head_block_state()->active_schedule;
         BOOST_TEST(active_schedule.producers.size() == 1u);
-        BOOST_TEST(active_schedule.producers.front().producer_name == "rem");
+        BOOST_TEST(active_schedule.producers.front().producer_name == name("rem"));
 
         // Spend 1 day so we can use claimrewards
         produce_min_num_of_blocks_to_spend_time_wo_inactive_prod(fc::seconds(1 * 24 * 3600)); // 1 day
@@ -363,59 +385,75 @@ BOOST_FIXTURE_TEST_CASE( bootseq_test, bootseq_tester ) {
         // This will increase the total vote stake by (40,000,000 - 1,000)
         votepro( N(whale4), {N(prodq), N(prodr), N(prods), N(prodt), N(produ)} );
         BOOST_TEST(get_global_state()["total_activated_stake"].as<int64_t>() == 1899999996000);
+        for( auto prod : producer_candidates ) {
+            votepro(prod, { prod });
+        }
+
+        produce_blocks(4);
+        BOOST_REQUIRE(control->head_block_state()->block_num == 91);
+        for( auto prod : producer_candidates ) {
+            BOOST_REQUIRE(get_pending_pervote_reward(prod) == 0);
+            BOOST_REQUIRE(get_expected_produced_blocks(prod) == 0);
+            BOOST_REQUIRE(get_current_round_unpaid_blocks(prod) == 0);
+            BOOST_REQUIRE(get_unpaid_blocks(prod) == 0);
+        }
+
+        produce_block();
+        BOOST_REQUIRE(get_current_round_unpaid_blocks(N(prodm)) == 1);
+        BOOST_REQUIRE(get_total_votepay_shares() > 0.999 && get_total_votepay_shares() <= 1.0);
 
         // Since the total vote stake is more than 150,000,000, the new producer set will be set
-        produce_blocks_for_n_rounds(2); // 2 rounds since new producer schedule is set when the first block of next round is irreversible
         active_schedule = control->head_block_state()->active_schedule;
         BOOST_REQUIRE(active_schedule.producers.size() == 21);
-        BOOST_TEST(active_schedule.producers.at(0).producer_name == "proda");
-        BOOST_TEST(active_schedule.producers.at(1).producer_name == "prodb");
-        BOOST_TEST(active_schedule.producers.at(2).producer_name == "prodc");
-        BOOST_TEST(active_schedule.producers.at(3).producer_name == "prodd");
-        BOOST_TEST(active_schedule.producers.at(4).producer_name == "prode");
-        BOOST_TEST(active_schedule.producers.at(5).producer_name == "prodf");
-        BOOST_TEST(active_schedule.producers.at(6).producer_name == "prodg");
-        BOOST_TEST(active_schedule.producers.at(7).producer_name == "prodh");
-        BOOST_TEST(active_schedule.producers.at(8).producer_name == "prodi");
-        BOOST_TEST(active_schedule.producers.at(9).producer_name == "prodj");
-        BOOST_TEST(active_schedule.producers.at(10).producer_name == "prodk");
-        BOOST_TEST(active_schedule.producers.at(11).producer_name == "prodl");
-        BOOST_TEST(active_schedule.producers.at(12).producer_name == "prodm");
-        BOOST_TEST(active_schedule.producers.at(13).producer_name == "prodn");
-        BOOST_TEST(active_schedule.producers.at(14).producer_name == "prodo");
-        BOOST_TEST(active_schedule.producers.at(15).producer_name == "prodp");
-        BOOST_TEST(active_schedule.producers.at(16).producer_name == "prodq");
-        BOOST_TEST(active_schedule.producers.at(17).producer_name == "prodr");
-        BOOST_TEST(active_schedule.producers.at(18).producer_name == "prods");
-        BOOST_TEST(active_schedule.producers.at(19).producer_name == "prodt");
-        BOOST_TEST(active_schedule.producers.at(20).producer_name == "produ");
+        BOOST_TEST(active_schedule.producers.at( 0).producer_name == name("proda"));
+        BOOST_TEST(active_schedule.producers.at( 1).producer_name == name("prodb"));
+        BOOST_TEST(active_schedule.producers.at( 2).producer_name == name("prodc"));
+        BOOST_TEST(active_schedule.producers.at( 3).producer_name == name("prodd"));
+        BOOST_TEST(active_schedule.producers.at( 4).producer_name == name("prode"));
+        BOOST_TEST(active_schedule.producers.at( 5).producer_name == name("prodf"));
+        BOOST_TEST(active_schedule.producers.at( 6).producer_name == name("prodg"));
+        BOOST_TEST(active_schedule.producers.at( 7).producer_name == name("prodh"));
+        BOOST_TEST(active_schedule.producers.at( 8).producer_name == name("prodi"));
+        BOOST_TEST(active_schedule.producers.at( 9).producer_name == name("prodj"));
+        BOOST_TEST(active_schedule.producers.at(10).producer_name == name("prodk"));
+        BOOST_TEST(active_schedule.producers.at(11).producer_name == name("prodl"));
+        BOOST_TEST(active_schedule.producers.at(12).producer_name == name("prodm"));
+        BOOST_TEST(active_schedule.producers.at(13).producer_name == name("prodn"));
+        BOOST_TEST(active_schedule.producers.at(14).producer_name == name("prodo"));
+        BOOST_TEST(active_schedule.producers.at(15).producer_name == name("prodp"));
+        BOOST_TEST(active_schedule.producers.at(16).producer_name == name("prodq"));
+        BOOST_TEST(active_schedule.producers.at(17).producer_name == name("prodr"));
+        BOOST_TEST(active_schedule.producers.at(18).producer_name == name("prods"));
+        BOOST_TEST(active_schedule.producers.at(19).producer_name == name("prodt"));
+        BOOST_TEST(active_schedule.producers.at(20).producer_name == name("produ"));
         BOOST_REQUIRE(get_total_votepay_shares() > 0.999 && get_total_votepay_shares() <= 1.0);
-        //Rounds in this schedule are started by prodp
-        //Counters of expected_produced_blocks
-        //proda-prodd - 12
-        //prode       - 7
-        //prodf-prodo - 0
-        //prodp       - 9
-        //prodq-produ - 12
 
+        //stake_share + vote_share must be less than 1 because otherwise remme savings will be equal to 0
         BOOST_REQUIRE_THROW(base_tester::push_action(config::system_account_name, N(setrwrdratio),
                                                      config::system_account_name, mvo()("stake_share",  0.5)("vote_share", 0.5)),
                             eosio_assert_message_exception);
+        //stake_share or vote_share cannot be equal to 0
         BOOST_REQUIRE_THROW(base_tester::push_action(config::system_account_name, N(setrwrdratio),
                                                      config::system_account_name, mvo()("stake_share",  0.0)("vote_share", 0.5)),
+                            eosio_assert_message_exception);
+        BOOST_REQUIRE_THROW(base_tester::push_action(config::system_account_name, N(setrwrdratio),
+                                                     config::system_account_name, mvo()("stake_share",  0.5)("vote_share", 0.0)),
                             eosio_assert_message_exception);
         set_reward_ratio(0.7, 0.2);
         BOOST_REQUIRE(get_global_rem_state()["per_vote_share"].as_double() == 0.2);
         BOOST_REQUIRE(get_global_rem_state()["per_stake_share"].as_double() == 0.7);
 
+        //torewards without authorization and with symbol != core_symbol() must fail
         BOOST_REQUIRE_THROW(torewards(N(b1), config::system_account_name, core_from_string("20000.0000")), missing_auth_exception);
+        BOOST_REQUIRE_THROW(torewards(config::system_account_name, config::system_account_name, eosio::chain::asset::from_string("20000.0000 FAIL")), eosio_assert_message_exception);
         torewards(config::system_account_name, config::system_account_name, core_from_string("20000.0000"));
         auto saving_balance = get_balance(N(rem.saving)).get_amount();
         auto spay_balance = get_balance(N(rem.spay)).get_amount();
         auto vpay_balance = get_balance(N(rem.vpay)).get_amount();
-        BOOST_REQUIRE(saving_balance >= 2000'0000);
-        BOOST_REQUIRE_EQUAL(spay_balance, 14000'0000);
-        BOOST_REQUIRE(vpay_balance <= 4000'0000);
+        //check that rewards are distributed with right proportion
+        BOOST_REQUIRE(saving_balance >= 2'000'0000);
+        BOOST_REQUIRE_EQUAL(spay_balance, 13'999'9985);
+        BOOST_REQUIRE(vpay_balance <= 4'000'0000);
         BOOST_REQUIRE_EQUAL(saving_balance + spay_balance + vpay_balance, 20000'0000);
 
         set_reward_ratio(0.6, 0.3);
@@ -427,7 +465,7 @@ BOOST_FIXTURE_TEST_CASE( bootseq_test, bootseq_tester ) {
         spay_balance = get_balance(N(rem.spay)).get_amount();
         vpay_balance = get_balance(N(rem.vpay)).get_amount();
         BOOST_REQUIRE(saving_balance >= 2000'0000 + 1000);
-        BOOST_REQUIRE_EQUAL(spay_balance, 14000'0000 + 6000);
+        BOOST_REQUIRE_EQUAL(spay_balance, 14'000'5982);
         BOOST_REQUIRE(vpay_balance <= 4000'0000 + 3000);
         BOOST_REQUIRE_EQUAL(saving_balance + spay_balance + vpay_balance, 20001'0000);
 
@@ -439,76 +477,38 @@ BOOST_FIXTURE_TEST_CASE( bootseq_test, bootseq_tester ) {
         votepro( N(b1), { N(proda), N(prodb), N(prodc), N(prodd), N(prode), N(prodf), N(prodg),
                            N(prodh), N(prodi), N(prodj), N(prodk), N(prodl), N(prodm), N(prodn),
                            N(prodo), N(prodp), N(prodq), N(prodr), N(prods), N(prodt), N(produ),
-                           N(runnerup1)} );
-        produce_block();
+                           N(runnerup2)} );
         BOOST_REQUIRE(get_total_votepay_shares() > 0.999 && get_total_votepay_shares() <= 1.0);
         produce_blocks_until_schedule_is_changed(2000);
-        produce_blocks(2);
-        //Counters of expected_produced_blocks
-        //proda-prodf - 60
-        //prodg       - 49
-        //prodh-prodo - 48
-        //prodp       - 57
-        //prodq-produ - 60
-        for (auto prod: { N(proda), N(prodb), N(prodc) }) {
-           BOOST_TEST(get_expected_produced_blocks(prod) == 60);
+        produce_block();
+        //schedule isn`t changed so no expected_produced_blocks calculated
+        for( auto prod : producer_candidates ) {
+           BOOST_REQUIRE(get_expected_produced_blocks(prod) == 0);
         }
-        BOOST_TEST(get_expected_produced_blocks(N(prodd)) == 49); //last producer in round
-        for (auto prod: { N(prode), N(prodf), N(prodg), N(prodh), N(prodi), N(prodj), N(prodk), N(prodl) }) {
-           BOOST_TEST(get_expected_produced_blocks(prod) == 48);
-        }
-        BOOST_TEST(get_expected_produced_blocks(N(prodm)) == 57); //first producer in round
-        for (auto prod: { N(prodn), N(prodo), N(prodp), N(prodq), N(prodr), N(prods), N(prodt), N(produ) }) {
-           BOOST_TEST(get_expected_produced_blocks(prod) == 60);
-        }
-
-        //update active schedule so we can check pending rewards after next schedule becomes active
+        produce_block();
         active_schedule = control->head_block_state()->active_schedule;
         BOOST_REQUIRE(active_schedule.producers.size() == 21);
-        BOOST_TEST(active_schedule.producers.at(0).producer_name == "proda");
-        BOOST_TEST(active_schedule.producers.at(1).producer_name == "prodb");
-        BOOST_TEST(active_schedule.producers.at(2).producer_name == "prodc");
-        BOOST_TEST(active_schedule.producers.at(3).producer_name == "prodd");
-        BOOST_TEST(active_schedule.producers.at(4).producer_name == "prode");
-        BOOST_TEST(active_schedule.producers.at(5).producer_name == "prodf");
-        BOOST_TEST(active_schedule.producers.at(6).producer_name == "prodg");
-        BOOST_TEST(active_schedule.producers.at(7).producer_name == "prodh");
-        BOOST_TEST(active_schedule.producers.at(8).producer_name == "prodi");
-        BOOST_TEST(active_schedule.producers.at(9).producer_name == "prodj");
-        BOOST_TEST(active_schedule.producers.at(10).producer_name == "prodk");
-        BOOST_TEST(active_schedule.producers.at(11).producer_name == "prodl");
-        BOOST_TEST(active_schedule.producers.at(12).producer_name == "prodm");
-        BOOST_TEST(active_schedule.producers.at(13).producer_name == "prodn");
-        BOOST_TEST(active_schedule.producers.at(14).producer_name == "prodo");
-        BOOST_TEST(active_schedule.producers.at(15).producer_name == "prodq");
-        BOOST_TEST(active_schedule.producers.at(16).producer_name == "prodr");
-        BOOST_TEST(active_schedule.producers.at(17).producer_name == "prods");
-        BOOST_TEST(active_schedule.producers.at(18).producer_name == "prodt");
-        BOOST_TEST(active_schedule.producers.at(19).producer_name == "produ");
-        BOOST_TEST(active_schedule.producers.at(20).producer_name == "runnerup1");
-        BOOST_TEST(get_pending_pervote_reward(N(runnerup1)) == 0);
-        BOOST_REQUIRE(get_total_votepay_shares() > 0.999 && get_total_votepay_shares() <= 1.0);
-        // make changes to top 21 producer list
-        votepro( N(b1), { N(proda), N(prodb), N(prodc), N(prodd), N(prode), N(prodf), N(prodg),
-                           N(prodh), N(prodi), N(prodj), N(prodk), N(prodl), N(prodm), N(prodn),
-                           N(prodo), N(prodp), N(prodq), N(prodr), N(prods), N(prodt), N(produ),
-                           N(runnerup1), N(runnerup2)} );
-        produce_block();
-        BOOST_REQUIRE(get_total_votepay_shares() > 0.999 && get_total_votepay_shares() <= 1.0);
-        produce_blocks_until_schedule_is_changed(2000);
-        produce_blocks(2);
+        BOOST_TEST(active_schedule.producers.at(19).producer_name == name("produ"));
+        BOOST_TEST(active_schedule.producers.at(20).producer_name == name("runnerup2"));
         BOOST_REQUIRE(get_total_votepay_shares() > 0.999 && get_total_votepay_shares() <= 1.0);
 
-        BOOST_TEST(get_expected_produced_blocks(N(prodp)) == 60); //wasn`t in second schedule, so expected_produced_blocks haven`t changed
-        BOOST_TEST(get_expected_produced_blocks(N(proda)) == 85); //last producer in round
-        for (auto prod: { N(prodb), N(prodc), N(prodd), N(prode), N(prodf), N(prodg), N(prodh), N(prodi), N(prodj), N(prodk), N(prodl) }) {
-           BOOST_TEST(get_expected_produced_blocks(prod) == 84);
+        //Counters of expected_produced_blocks
+        //proda-prodl - 36
+        //prodm       - 45
+        //prodn-prodo - 48
+        //prodp       - 37
+        //prodr-produ - 36
+        for (auto prod: { N(proda), N(prodb), N(prodc), N(prode), N(prodf), N(prodg), N(prodh), N(prodi), N(prodj), N(prodk), N(prodl) }) {
+            BOOST_TEST(get_expected_produced_blocks(prod) == 36);
         }
-        BOOST_TEST(get_expected_produced_blocks(N(prodm)) == 93);
-        for (auto prod: { N(prodn), N(prodo), N(prodq), N(prodr), N(prods), N(prodt), N(produ) }) {
-           BOOST_TEST(get_expected_produced_blocks(prod) == 96);
+        BOOST_TEST(get_expected_produced_blocks(N(prodm)) == 45); //first producer in round
+        for (auto prod: { N(prodn), N(prodo) }) {
+            BOOST_TEST(get_expected_produced_blocks(prod) == 48);
         }
-        BOOST_TEST(get_expected_produced_blocks(N(runnerup1)) == 36);
+        BOOST_TEST(get_expected_produced_blocks(N(prodp)) == 37); //last producer in round
+        for (auto prod: { N(prodr), N(prods), N(prodt), N(produ) }) {
+            BOOST_TEST(get_expected_produced_blocks(prod) == 36);
+        }
 
         BOOST_TEST(get_balance(N(runnerup1)).get_amount() == 0);
         BOOST_TEST(get_balance(N(proda)).get_amount() == 0);
@@ -536,13 +536,17 @@ BOOST_FIXTURE_TEST_CASE( bootseq_test, bootseq_tester ) {
         BOOST_REQUIRE(control->head_block_time().time_since_epoch() < first_june_2028);
 
         // This should thrown an error, since block one can only unstake all his stake after 10 years
-
         BOOST_REQUIRE_THROW(undelegate_bandwidth(N(b1), N(b1), core_from_string("49999500.0000")), eosio_assert_message_exception);
 
         // Skip 10 years
         produce_block(first_june_2028 - control->head_block_time().time_since_epoch());
 
+        // initiate undelegation
+        undelegate_bandwidth(N(b1), N(b1), core_from_string("1.0000"));
+
+
         // Block one should be able to unstake all his stake now
+        produce_min_num_of_blocks_to_spend_time_wo_inactive_prod( fc::days( 180 ) );
         undelegate_bandwidth(N(b1), N(b1), core_from_string("49999500.0000"));
 
         return;
@@ -558,7 +562,9 @@ BOOST_FIXTURE_TEST_CASE( bootseq_test, bootseq_tester ) {
 BOOST_FIXTURE_TEST_CASE( stake_lock_test, bootseq_tester ) {
     try{
         // Create rem.msig and rem.token
-        create_accounts({N(rem.msig), N(rem.token), N(rem.ram), N(rem.ramfee), N(rem.stake), N(rem.vpay), N(rem.bpay), N(rem.saving) });
+        create_accounts({N(rem.msig), N(rem.token), N(rem.rex), N(rem.ram),
+                         N(rem.ramfee), N(rem.stake), N(rem.bpay),
+                         N(rem.spay), N(rem.vpay), N(rem.saving)});
 
         set_code_abi(N(rem.msig),
                      contracts::rem_msig_wasm(),
