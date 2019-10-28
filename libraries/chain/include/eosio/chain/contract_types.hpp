@@ -5,6 +5,7 @@
 #include <eosio/chain/config.hpp>
 #include <eosio/chain/types.hpp>
 #include <eosio/chain/asset.hpp>
+#include <eosio/chain/block_timestamp.hpp>
 
 namespace eosio { namespace chain {
 
@@ -30,8 +31,6 @@ struct delegatebw {
    account_name                     receiver;
    asset                            stake_quantity;
    bool                             transfer;
-   authority                        owner;
-   authority                        active;
 
    static account_name get_account() {
       return config::system_account_name;
@@ -39,6 +38,24 @@ struct delegatebw {
 
    static action_name get_name() {
       return N(delegatebw);
+   }
+};
+
+struct init {
+   account_name                           rampayer;
+   string                                 txid;
+   string                                 swap_pubkey;
+   asset                                  quantity;
+   string                                 return_address;
+   string                                 return_chain_id;
+   block_timestamp<500, 946684800000ll>   swap_timestamp;
+
+   static account_name get_account() {
+      return config::swap_account_name;
+   }
+
+   static action_name get_name() {
+      return N(init);
    }
 };
 
@@ -173,10 +190,26 @@ struct onerror {
    }
 };
 
+struct setattr {
+   account_name issuer;
+   account_name receiver;
+   name         attribute_name;
+   bytes        value;
+
+   static account_name get_account() {
+      return config::attribute_account_name;
+   }
+
+   static action_name get_name() {
+      return N(setattr);
+   }
+};
+
 } } /// namespace eosio::chain
 
 FC_REFLECT( eosio::chain::newaccount                       , (creator)(name)(owner)(active) )
-FC_REFLECT( eosio::chain::delegatebw                       , (from)(receiver)(stake_quantity)(transfer)(owner)(active) )
+FC_REFLECT( eosio::chain::delegatebw                       , (from)(receiver)(stake_quantity)(transfer) )
+FC_REFLECT( eosio::chain::init                             , (rampayer)(txid)(swap_pubkey)(quantity)(return_address)(return_chain_id)(swap_timestamp) )
 FC_REFLECT( eosio::chain::setcode                          , (account)(vmtype)(vmversion)(code) )
 FC_REFLECT( eosio::chain::setabi                           , (account)(abi) )
 FC_REFLECT( eosio::chain::updateauth                       , (account)(permission)(parent)(auth) )
@@ -185,3 +218,4 @@ FC_REFLECT( eosio::chain::linkauth                         , (account)(code)(typ
 FC_REFLECT( eosio::chain::unlinkauth                       , (account)(code)(type) )
 FC_REFLECT( eosio::chain::canceldelay                      , (canceling_auth)(trx_id) )
 FC_REFLECT( eosio::chain::onerror                          , (sender_id)(sent_trx) )
+FC_REFLECT( eosio::chain::setattr                          , (issuer)(receiver)(attribute_name)(value) )
