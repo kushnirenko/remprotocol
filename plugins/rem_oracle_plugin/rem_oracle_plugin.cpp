@@ -159,7 +159,7 @@ class rem_oracle_plugin_impl {
          auto chainid = app().get_plugin<chain_plugin>().get_chain_id();
 
          signed_transaction trx;
-         trx.actions.emplace_back(vector<chain::permission_level>{{this->_oracle_signing_account,this->_oracle_signing_permission}},
+         trx.actions.emplace_back(vector<chain::permission_level>{{this->_oracle_signing_account,name(this->_oracle_signing_permission)}},
            setprice{this->_oracle_signing_account,
              pairs_data});
 
@@ -172,7 +172,7 @@ class rem_oracle_plugin_impl {
             auto trxs_copy = std::make_shared<std::decay_t<decltype(trxs)>>(std::move(trxs));
             app().post(priority::low, [trxs_copy]() {
               for (size_t i = 0; i < trxs_copy->size(); ++i) {
-                  app().get_plugin<chain_plugin>().accept_transaction( packed_transaction(trxs_copy->at(i)),
+                  app().get_plugin<chain_plugin>().accept_transaction( std::make_shared<packed_transaction>(trxs_copy->at(i)),
                   [](const fc::static_variant<fc::exception_ptr, transaction_trace_ptr>& result){
                     if (result.contains<fc::exception_ptr>()) {
                        elog("Failed to push set price transaction: ${res}", ( "res", result.get<fc::exception_ptr>()->to_string() ));
