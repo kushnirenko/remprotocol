@@ -33,56 +33,19 @@ using namespace fc;
 
 using mvo = mutable_variant_object;
 
-struct rem_genesis_account {
-   account_name name;
-   uint64_t initial_balance;
-};
-
-std::vector<rem_genesis_account> genesis_test( {
- {N(b1),        100'000'000'0000ll},
- {N(whale1),     40'000'000'0000ll},
- {N(whale2),     30'000'000'0000ll},
- {N(whale3),     20'000'000'0000ll},
- {N(proda),         500'000'0000ll},
- {N(prodb),         500'000'0000ll},
- {N(prodc),         500'000'0000ll},
- {N(prodd),         500'000'0000ll},
- {N(prode),         500'000'0000ll},
- {N(prodf),         500'000'0000ll},
- {N(prodg),         500'000'0000ll},
- {N(prodh),         500'000'0000ll},
- {N(prodi),         500'000'0000ll},
- {N(prodj),         500'000'0000ll},
- {N(prodk),         500'000'0000ll},
- {N(prodl),         500'000'0000ll},
- {N(prodm),         500'000'0000ll},
- {N(prodn),         500'000'0000ll},
- {N(prodo),         500'000'0000ll},
- {N(prodp),         500'000'0000ll},
- {N(prodq),         500'000'0000ll},
- {N(prodr),         500'000'0000ll},
- {N(prods),         500'000'0000ll},
- {N(prodt),         500'000'0000ll},
- {N(produ),         500'000'0000ll},
- {N(runnerup1),     200'000'0000ll},
- {N(runnerup2),     150'000'0000ll},
- {N(runnerup3),     100'000'0000ll},
-});
-
-const auto producer_candidates = {
-   N(proda), N(prodb), N(prodc), N(prodd), N(prode), N(prodf), N(prodg),
-   N(prodh), N(prodi), N(prodj), N(prodk), N(prodl), N(prodm), N(prodn),
-   N(prodo), N(prodp), N(prodq), N(prodr), N(prods), N(prodt), N(produ)
-};
-
 const char *SYMBOL_CORE_NAME = "REM";
 symbol CORE_SYMBOL_STR(4, SYMBOL_CORE_NAME);
-uint32_t majority = (producer_candidates.size() * 2 / 3) + 1;
 const string REMCHAIN_ID = "93ece941df27a5787a405383a66a7c26d04e80182adf504365710331ac0625a7";
 
 asset _core_from_string(const string &s) {
    return asset::from_string(s + " " + SYMBOL_CORE_NAME);
 }
+
+const auto _producer_candidates = {
+      N(proda), N(prodb), N(prodc), N(prodd), N(prode), N(prodf), N(prodg),
+      N(prodh), N(prodi), N(prodj), N(prodk), N(prodl), N(prodm), N(prodn),
+      N(prodo), N(prodp), N(prodq), N(prodr), N(prods), N(prodt), N(produ)
+};
 
 struct init_data {
    name rampayer = N(proda);
@@ -93,13 +56,6 @@ struct init_data {
    string return_chain_id = "ethropsten";
    block_timestamp_type swap_timestamp;
 };
-
-string join(vector<string> &&vec, string delim = string("*")) {
-   return std::accumulate(std::next(vec.begin()), vec.end(), vec[0],
-                          [&delim](string &a, string &b) {
-                             return a + delim + b;
-                          });
-}
 
 class swap_tester : public TESTER {
 public:
@@ -259,19 +215,19 @@ public:
       return r;
    }
 
-   auto setoutswpamt(const int64_t &amount) {
+   auto setminswpout(const int64_t &amount) {
       vector<permission_level> level = {{N(rem.swap), config::active_name}, {N(rem), config::active_name}};
-      auto r = base_tester::push_action(N(rem.swap), N(setoutswpamt), level, mvo()
+      auto r = base_tester::push_action(N(rem.swap), N(setminswpout), level, mvo()
          ("amount", amount)
       );
       produce_block();
       return r;
    }
 
-   auto setremchainid(const string &remchain_id) {
+   auto setchainid(const string &chain_id) {
       vector<permission_level> level = {{N(rem.swap), config::active_name}, {N(rem), config::active_name}};
-      auto r = base_tester::push_action(N(rem.swap), N(setremchainid), level, mvo()
-         ("remchain_id", remchain_id)
+      auto r = base_tester::push_action(N(rem.swap), N(setchainid), level, mvo()
+         ("chain_id", chain_id)
       );
       produce_block();
       return r;
@@ -378,6 +334,13 @@ public:
       produce_blocks();
    }
 
+   string join(vector<string> &&vec, string delim = string("*")) {
+      return std::accumulate(std::next(vec.begin()), vec.end(), vec[0],
+                             [&delim](string &a, string &b) {
+                                return a + delim + b;
+                             });
+   }
+
    abi_serializer abi_ser;
 };
 
@@ -434,6 +397,41 @@ swap_tester::swap_tester() {
 
    BOOST_REQUIRE_EQUAL(initial_supply, actual);
 
+   struct rem_genesis_account {
+      account_name name;
+      uint64_t initial_balance;
+   };
+
+   std::vector<rem_genesis_account> genesis_test( {
+     {N(b1),        100'000'000'0000ll},
+     {N(whale1),     40'000'000'0000ll},
+     {N(whale2),     30'000'000'0000ll},
+     {N(whale3),     20'000'000'0000ll},
+     {N(proda),         500'000'0000ll},
+     {N(prodb),         500'000'0000ll},
+     {N(prodc),         500'000'0000ll},
+     {N(prodd),         500'000'0000ll},
+     {N(prode),         500'000'0000ll},
+     {N(prodf),         500'000'0000ll},
+     {N(prodg),         500'000'0000ll},
+     {N(prodh),         500'000'0000ll},
+     {N(prodi),         500'000'0000ll},
+     {N(prodj),         500'000'0000ll},
+     {N(prodk),         500'000'0000ll},
+     {N(prodl),         500'000'0000ll},
+     {N(prodm),         500'000'0000ll},
+     {N(prodn),         500'000'0000ll},
+     {N(prodo),         500'000'0000ll},
+     {N(prodp),         500'000'0000ll},
+     {N(prodq),         500'000'0000ll},
+     {N(prodr),         500'000'0000ll},
+     {N(prods),         500'000'0000ll},
+     {N(prodt),         500'000'0000ll},
+     {N(produ),         500'000'0000ll},
+     {N(runnerup1),     200'000'0000ll},
+     {N(runnerup2),     150'000'0000ll},
+     {N(runnerup3),     100'000'0000ll},
+   });
    // Create genesis accounts
    for (const auto &account : genesis_test) {
       create_account(account.name, N(rem.swap));
@@ -449,7 +447,7 @@ swap_tester::swap_tester() {
    }
 
    // Register producers
-   for (const auto &producer : producer_candidates) {
+   for (const auto &producer : _producer_candidates) {
       register_producer(producer);
    }
 
@@ -468,7 +466,7 @@ swap_tester::swap_tester() {
    // add supported chain
    addchain(N(rem.swap), N(ethropsten), true, true);
    setswapfee(500000);
-   setremchainid(REMCHAIN_ID);
+   setchainid(REMCHAIN_ID);
 }
 
 BOOST_AUTO_TEST_SUITE(swap_tests)
@@ -497,7 +495,7 @@ BOOST_FIXTURE_TEST_CASE(init_swap_test, swap_tester) {
       BOOST_REQUIRE_EQUAL("0", data["status"].as_string());
 
       // 21 approvals, tokens will be issued after 2/3 + 1 approvals
-      for (const auto &producer : producer_candidates) {
+      for (const auto &producer : _producer_candidates) {
          init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
                    init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
       }
@@ -588,7 +586,7 @@ BOOST_FIXTURE_TEST_CASE(init_swap_after_cancel_test, swap_tester) {
          // swap can be canceled after expiration (1 week)
          .swap_timestamp = time_point_sec::from_iso_string("2019-12-05T00:00:43.000")
       };
-      for (const auto &producer : producer_candidates) {
+      for (const auto &producer : _producer_candidates) {
          init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
                    init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
       }
@@ -618,7 +616,7 @@ BOOST_FIXTURE_TEST_CASE(finish_swap_test, swap_tester) {
 
       string swap_id = sha256::hash(swap_payload);
 
-      for (const auto &producer : producer_candidates) {
+      for (const auto &producer : _producer_candidates) {
          init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
                    init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
       }
@@ -650,6 +648,7 @@ BOOST_FIXTURE_TEST_CASE(finish_swap_test, swap_tester) {
       BOOST_REQUIRE_EQUAL("2", data["status"].as_string());
       BOOST_REQUIRE_EQUAL(string(swap_timepoint), data["swap_timestamp"].as_string());
       // amount of provided approvals must be a 2/3 + 1 of active producers
+      uint32_t majority = (_producer_candidates.size() * 2 / 3) + 1;
       BOOST_TEST(majority <= data["provided_approvals"].get_array().size());
       // balance equal : receiver balance += swapped quantity - producers_reward
       BOOST_REQUIRE_EQUAL(receiver_before_balance + init_swap_data.quantity - producers_reward,
@@ -682,7 +681,7 @@ BOOST_FIXTURE_TEST_CASE(finish_expired_swap_test, swap_tester) {
       };
       time_point swap_timepoint = init_swap_data.swap_timestamp.to_time_point();
 
-      for (const auto &producer : producer_candidates) {
+      for (const auto &producer : _producer_candidates) {
          init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
                    init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
       }
@@ -704,7 +703,7 @@ BOOST_FIXTURE_TEST_CASE(finish_expired_swap_test, swap_tester) {
 
       // swap lifetime expired if a swap_timeswamp > 180 days
       block_timestamp_type swap_expired_timestamp = time_point_sec::from_iso_string("2019-12-25T00:00:44.500");
-      for (const auto &producer : producer_candidates) {
+      for (const auto &producer : _producer_candidates) {
          init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
                    init_swap_data.return_address, init_swap_data.return_chain_id, swap_expired_timestamp);
       }
@@ -768,7 +767,7 @@ BOOST_FIXTURE_TEST_CASE(finish_swap_key_assert_test, swap_tester) {
       };
       time_point swap_timepoint = init_swap_data.swap_timestamp.to_time_point();
 
-      for (const auto &producer : producer_candidates) {
+      for (const auto &producer : _producer_candidates) {
          init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
                    init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
       }
@@ -802,7 +801,7 @@ BOOST_FIXTURE_TEST_CASE(finish_after_cancel_swap_test, swap_tester) {
       };
       time_point swap_timepoint = init_swap_data.swap_timestamp.to_time_point();
 
-      for (const auto &producer : producer_candidates) {
+      for (const auto &producer : _producer_candidates) {
          init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
                    init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
       }
@@ -843,7 +842,7 @@ BOOST_FIXTURE_TEST_CASE(finishnewacc_swap_test, swap_tester) {
 
       string swap_id = sha256::hash(swap_payload);
 
-      for (const auto &producer : producer_candidates) {
+      for (const auto &producer : _producer_candidates) {
          init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
                    init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
       }
@@ -875,6 +874,7 @@ BOOST_FIXTURE_TEST_CASE(finishnewacc_swap_test, swap_tester) {
       BOOST_REQUIRE_EQUAL("2", data["status"].as_string());
       BOOST_REQUIRE_EQUAL(string(swap_timepoint), data["swap_timestamp"].as_string());
       // amount of provided approvals must be a 2/3 + 1 of active producers
+      uint32_t majority = (_producer_candidates.size() * 2 / 3) + 1;
       BOOST_TEST(majority <= data["provided_approvals"].get_array().size());
 //      BOOST_TEST(is_account(receiver));
       // balance equal : receiver balance = swapped quantity + min account stake - producers_reward
@@ -944,7 +944,7 @@ BOOST_FIXTURE_TEST_CASE(finishnewacc_expired_swap_test, swap_tester) {
       };
       time_point swap_timepoint = init_swap_data.swap_timestamp.to_time_point();
 
-      for (const auto &producer : producer_candidates) {
+      for (const auto &producer : _producer_candidates) {
          init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
                    init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
       }
@@ -966,7 +966,7 @@ BOOST_FIXTURE_TEST_CASE(finishnewacc_expired_swap_test, swap_tester) {
 
       // swap lifetime expired if a swap_timeswamp > 180 days
       block_timestamp_type swap_expired_timestamp = time_point_sec::from_iso_string("2019-12-25T00:00:44.500");
-      for (const auto &producer : producer_candidates) {
+      for (const auto &producer : _producer_candidates) {
          init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
                    init_swap_data.return_address, init_swap_data.return_chain_id, swap_expired_timestamp);
       }
@@ -1003,7 +1003,7 @@ BOOST_FIXTURE_TEST_CASE(finishnewacc_swap_key_assert_test, swap_tester) {
       };
       time_point swap_timepoint = init_swap_data.swap_timestamp.to_time_point();
 
-      for (const auto &producer : producer_candidates) {
+      for (const auto &producer : _producer_candidates) {
          init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
                    init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
       }
@@ -1040,7 +1040,7 @@ BOOST_FIXTURE_TEST_CASE(finishnewacc_after_cancel_swap_test, swap_tester) {
       };
       time_point swap_timepoint = init_swap_data.swap_timestamp.to_time_point();
 
-      for (const auto &producer : producer_candidates) {
+      for (const auto &producer : _producer_candidates) {
          init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
                    init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
       }
@@ -1082,7 +1082,7 @@ BOOST_FIXTURE_TEST_CASE(cancel_swap_test, swap_tester) {
       string swap_id = sha256::hash(swap_payload);
 
       auto remswap_before_init_balance = get_balance(N(rem.swap));
-      for (const auto &producer : producer_candidates) {
+      for (const auto &producer : _producer_candidates) {
          init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
                    init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
       }
@@ -1104,12 +1104,13 @@ BOOST_FIXTURE_TEST_CASE(cancel_swap_test, swap_tester) {
       // balance equal: after issue tokens balance before cancel should be increased on the 'quantity' amount of tokens
       BOOST_REQUIRE_EQUAL(remswap_before_init_balance + init_swap_data.quantity, remswap_before_cancel_balance);
       // amount of provided approvals must be a 2/3 + 1 of active producers
+      uint32_t majority = (_producer_candidates.size() * 2 / 3) + 1;
       BOOST_TEST(majority <= data["provided_approvals"].get_array().size());
 
       block_timestamp_type swap_not_expired_timestamp = time_point_sec(control->head_block_time());
       // swap lifetime expired if a swap_timeswamp > 180 days
       block_timestamp_type swap_expired_timestamp = time_point_sec::from_iso_string("2019-07-05T00:01:10.000");
-      for (const auto &producer : producer_candidates) {
+      for (const auto &producer : _producer_candidates) {
          init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
                    init_swap_data.return_address, init_swap_data.return_chain_id, swap_not_expired_timestamp);
          init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
@@ -1160,7 +1161,7 @@ BOOST_FIXTURE_TEST_CASE(cancel_after_finish_swap_test, swap_tester) {
       };
       time_point swap_timepoint = init_swap_data.swap_timestamp.to_time_point();
 
-      for (const auto &producer : producer_candidates) {
+      for (const auto &producer : _producer_candidates) {
          init_swap(producer, init_swap_data.txid, init_swap_data.swap_pubkey, init_swap_data.quantity,
                    init_swap_data.return_address, init_swap_data.return_chain_id, init_swap_data.swap_timestamp);
       }
@@ -1235,24 +1236,24 @@ BOOST_FIXTURE_TEST_CASE(set_swap_fee_test, swap_tester) {
    } FC_LOG_AND_RETHROW()
 }
 
-BOOST_FIXTURE_TEST_CASE(set_out_swap_amount_test, swap_tester) {
+BOOST_FIXTURE_TEST_CASE(set_min_swap_out_test, swap_tester) {
    try {
-      setoutswpamt(5000000);
+      setminswpout(5000000);
       auto min_amount = get_singtable(N(rem.swap), N(swapparams), "swapparams")["out_swap_min_amount"];
       BOOST_REQUIRE_EQUAL(min_amount.as_int64(), 5000000);
       // amount must be a positive
-      BOOST_REQUIRE_THROW(setoutswpamt(-1000000), eosio_assert_message_exception);
+      BOOST_REQUIRE_THROW(setminswpout(-1000000), eosio_assert_message_exception);
    } FC_LOG_AND_RETHROW()
 }
 
-BOOST_FIXTURE_TEST_CASE(set_remchain_id_test, swap_tester) {
+BOOST_FIXTURE_TEST_CASE(set_chain_id_test, swap_tester) {
    try {
       string expected_chain_id("0x", 32);
-      setremchainid(expected_chain_id);
-      auto chain_id = get_singtable(N(rem.swap), N(swapparams), "swapparams")["remchain_id"];
+      setchainid(expected_chain_id);
+      auto chain_id = get_singtable(N(rem.swap), N(swapparams), "swapparams")["chain_id"];
       BOOST_REQUIRE_EQUAL(chain_id.as_string(), expected_chain_id);
       // invalid chain-id
-      BOOST_REQUIRE_THROW(setremchainid(""), eosio_assert_message_exception);
+      BOOST_REQUIRE_THROW(setchainid(""), eosio_assert_message_exception);
    } FC_LOG_AND_RETHROW()
 }
 

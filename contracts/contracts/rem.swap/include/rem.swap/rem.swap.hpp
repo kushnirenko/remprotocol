@@ -133,17 +133,17 @@ namespace eosio {
        * @param quantity - the quantity of tokens to be deducted.
        */
       [[eosio::action]]
-      void setoutswpamt(const int64_t &amount);
+      void setminswpout(const int64_t &amount);
 
       /**
        * Set remchain-id action.
        *
        * @details Change remchain-id, action permitted only for producers.
        *
-       * @param remchain_id - the identifier to be changed to.
+       * @param chain_id - the identifier to be changed to.
        */
       [[eosio::action]]
-      void setremchainid(const string &remchain_id);
+      void setchainid(const string &chain_id);
 
       /**
        * Add supported chain identifier.
@@ -177,8 +177,9 @@ namespace eosio {
       using finish_swap_action = action_wrapper<"finish"_n, &swap::finish>;
       using finish_swap_and_create_acc_action = action_wrapper<"finishnewacc"_n, &swap::finishnewacc>;
       using cancel_swap_action = action_wrapper<"cancel"_n, &swap::cancel>;
-      using set_setswapfee_action = action_wrapper<"setswapfee"_n, &swap::setswapfee>;
-      using set_setremchainid_action = action_wrapper<"setremchainid"_n, &swap::setremchainid>;
+      using set_swapfee_action = action_wrapper<"setswapfee"_n, &swap::setswapfee>;
+      using set_minswapout_action = action_wrapper<"setminswpout"_n, &swap::setminswpout>;
+      using set_chainid_action = action_wrapper<"setchainid"_n, &swap::setchainid>;
       using add_chain_action = action_wrapper<"addchain"_n, &swap::addchain>;
 
    private:
@@ -226,10 +227,10 @@ namespace eosio {
          int64_t   in_swap_fee = 1000;
          // minimum amount to swap tokens from remchain
          int64_t   out_swap_min_amount = 5000000;
-         string    remchain_id = "0";
+         string    chain_id = "0";
 
          // explicit serialization macro is not necessary, used here only to improve compilation time
-         EOSLIB_SERIALIZE( swapparams, (in_swap_fee)(out_swap_min_amount)(remchain_id) )
+         EOSLIB_SERIALIZE( swapparams, (in_swap_fee)(out_swap_min_amount)(chain_id) )
       };
 
       struct [[eosio::table]] chains {
