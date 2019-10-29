@@ -29,7 +29,7 @@ namespace eosio {
     */
    class [[eosio::contract("rem.auth")]] auth : public contract {
    public:
-      auth(name receiver, name code, datastream<const char*> ds);
+      using contract::contract;
 
       /**
        * Add new authentication key action.
@@ -120,27 +120,16 @@ namespace eosio {
       void transfer(const name &from, const name &to, const asset &quantity,
                     const string &pub_key_str, const signature &signed_by_pub_key);
 
-      /**
-       * Set storage fee action.
-       *
-       * @details Allows change storage fee, action permitted producers.
-       *
-       * @param quantity - the quantity of tokens to be set.
-       */
-      [[eosio::action]]
-      void setstoragefee(const asset &quantity);
-
       using addkeyacc_action = action_wrapper<"addkeyacc"_n, &auth::addkeyacc>;
       using addkeyapp_action = action_wrapper<"addkeyapp"_n, &auth::addkeyapp>;
       using revokeacc_action = action_wrapper<"revokeacc"_n, &auth::revokeacc>;
       using revokeapp_action = action_wrapper<"revokeapp"_n, &auth::revokeapp>;
       using buyauth_action = action_wrapper<"buyauth"_n, &auth::buyauth>;
       using transfer_action = action_wrapper<"transfer"_n, &auth::transfer>;
-      using setstoragefee_action = action_wrapper<"setstoragefee"_n, &auth::setstoragefee>;
-
    private:
       static constexpr symbol auth_symbol{"AUTH", 4};
       static constexpr name system_account = "rem"_n;
+      static constexpr name oracle_contract = "rem.oracle"_n;
 
       const asset key_store_price{10000, auth_symbol};
       const time_point key_lifetime = time_point(seconds(31104000)); // 360 days
@@ -168,18 +157,20 @@ namespace eosio {
          uint64_t primary_key()const { return balance.symbol.code().raw(); }
       };
 
-      struct [[eosio::table]] storageprice {
-         asset    quantity;
+      struct [[eosio::table]] remprice {
+         name                    pair;
+         double                  price = 0;
+         vector<double>          price_points;
+         block_timestamp         last_update;
 
-         EOSLIB_SERIALIZE( storageprice, (quantity) )
+         uint64_t primary_key()const { return pair.value; }
+
+         // explicit serialization macro is not necessary, used here only to improve compilation time
+         EOSLIB_SERIALIZE( remprice, (pair)(price)(price_points)(last_update))
       };
 
-      typedef singleton<"storageprice"_n, storageprice> storage_price_idx;
-
-      storage_price_idx storage_price_table;
-      storageprice storage_price_data;
-
       typedef multi_index<"accounts"_n, account> accounts;
+      typedef multi_index< "remprice"_n, remprice> remprice_inx;
       typedef multi_index<"authkeys"_n, authkeys,
             indexed_by<"bynotvalbfr"_n, const_mem_fun <authkeys, uint64_t, &authkeys::by_not_valid_before>>,
             indexed_by<"bynotvalaftr"_n, const_mem_fun <authkeys, uint64_t, &authkeys::by_not_valid_after>>,
@@ -196,6 +187,7 @@ namespace eosio {
       auto get_authkey_it(const authkeys_idx &authkeys_tbl, const name &account, const public_key &key);
       asset get_balance( const name& token_contract_account, const name& owner, const symbol& sym );
       asset get_authrem_price(const asset &quantity);
+      double get_remusd_price() const;
 
       void require_app_auth(const name &account, const public_key &key);
       bool assert_recover_key(const checksum256 &digest, const signature &sign, const public_key &key);

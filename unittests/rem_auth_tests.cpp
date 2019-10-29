@@ -28,11 +28,6 @@ using namespace fc;
 
 using mvo = mutable_variant_object;
 
-struct rem_genesis_account {
-   account_name name;
-   uint64_t     initial_balance;
-};
-
 const char *AUTH_SYMBOL_NAME = "AUTH";
 symbol AUTH_SYMBOL(4, AUTH_SYMBOL_NAME);
 
@@ -103,7 +98,7 @@ public:
    }
 
    auto updateauth(const name &account, const name& code_account) {
-      auto auth = authority(testing::base_tester::get_public_key(account.to_string(), "active"));
+      auto auth = authority(get_public_key(account, "active"));
       auth.accounts.push_back(permission_level_weight{{code_account, config::rem_code_name}, 1});
 
       auto r = base_tester::push_action(N(rem), N(updateauth), account, mvo()
@@ -174,14 +169,6 @@ public:
          ("account",  account)
          ("quantity", quantity )
          ("max_price", max_price )
-      );
-      produce_block();
-      return r;
-   }
-
-   auto setstoragefee(const asset &quantity, const vector<permission_level>& auths) {
-      auto r = base_tester::push_action(N(rem.auth), N(setstoragefee), auths, mvo()
-         ("quantity",  quantity)
       );
       produce_block();
       return r;
@@ -260,7 +247,7 @@ public:
 
 rem_auth_tester::rem_auth_tester() {
    // Create rem.msig and rem.token, rem.auth
-   create_accounts({N(rem.msig), N(rem.token), N(rem.ram), N(rem.ramfee), N(rem.stake), N(rem.bpay), N(rem.spay), N(rem.vpay), N(rem.saving), N(rem.auth) });
+   create_accounts({N(rem.msig), N(rem.token), N(rem.rex), N(rem.ram), N(rem.ramfee), N(rem.stake), N(rem.bpay), N(rem.spay), N(rem.vpay), N(rem.saving), N(rem.auth) });
 
    // Register producers
    const auto producer_candidates = {
@@ -305,6 +292,11 @@ rem_auth_tester::rem_auth_tester() {
 
    auto actual = get_balance(config::system_account_name);
    BOOST_REQUIRE_EQUAL(initial_supply_core, actual);
+
+   struct rem_genesis_account {
+      account_name name;
+      uint64_t     initial_balance;
+   };
 
    std::vector<rem_genesis_account> genesis_test( {
      {N(b1),        100'000'000'0000ll},
@@ -356,7 +348,6 @@ rem_auth_tester::rem_auth_tester() {
       register_producer(producer);
    }
    updateauth(N(rem.auth), N(rem.auth));
-   setstoragefee(auth_from_string("1.0000"), { permission_level{N(rem.auth), config::active_name} });
 }
 
 BOOST_AUTO_TEST_SUITE(rem_auth_tests)

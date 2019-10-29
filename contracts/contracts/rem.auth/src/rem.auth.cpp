@@ -10,13 +10,6 @@
 namespace eosio {
    using eosiosystem::system_contract;
 
-   auth::auth(name receiver, name code, datastream<const char*> ds)
-   :contract(receiver, code, ds),
-    storage_price_table(get_self(), get_self().value)
-    {
-      storage_price_data = storage_price_table.exists() ? storage_price_table.get() : storageprice{};
-    };
-
    void auth::addkeyacc(const name &account, const string &pub_key_str, const signature &signed_by_pub_key,
                         const string &extra_pub_key, const asset &price_limit, const string &payer_str)
    {
@@ -210,6 +203,13 @@ namespace eosio {
       return it == accountstable.end() ? asset{0, sym} : it->balance;
    }
 
+//   double auth::get_remusd_price() const {
+//      remprice_inx remprice_table(oracle_contract, oracle_contract.value);
+//      auto it = remprice_table.find("rem.usd"_n.value);
+//      check(it != remprice_table.end(), "error pair is changed");
+//      return it->price;
+//   }
+
    asset auth::get_authrem_price(const asset &quantity)
    {
 //      double remusd = get_remusd_price();
@@ -252,8 +252,8 @@ namespace eosio {
       return std::accumulate(std::next(vec.begin()), vec.end(), vec[0],
                              [&delim](string& a, string& b) {
                                 return a + delim + b;
-                             });
+      });
    }
 } /// namespace eosio
 
-EOSIO_DISPATCH( eosio::auth, (addkeyacc)(addkeyapp)(revokeacc)(revokeapp)(buyauth)(transfer)(setstoragefee) )
+EOSIO_DISPATCH( eosio::auth, (addkeyacc)(addkeyapp)(revokeacc)(revokeapp)(buyauth)(transfer) )
