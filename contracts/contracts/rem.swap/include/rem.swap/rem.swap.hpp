@@ -140,10 +140,10 @@ namespace eosio {
        *
        * @details Change remchain-id, action permitted only for producers.
        *
-       * @param remchain_id - the identifier to be changed to.
+       * @param chain_id - the identifier to be changed to.
        */
       [[eosio::action]]
-      void setchainid(const string &remchain_id);
+      void setchainid(const string &chain_id);
 
       /**
        * Add supported chain identifier.
@@ -227,10 +227,10 @@ namespace eosio {
          int64_t   in_swap_fee = 1000;
          // minimum amount to swap tokens from remchain
          int64_t   out_swap_min_amount = 5000000;
-         string    remchain_id = "0";
+         string    chain_id = "0";
 
          // explicit serialization macro is not necessary, used here only to improve compilation time
-         EOSLIB_SERIALIZE( swapparams, (in_swap_fee)(out_swap_min_amount)(remchain_id) )
+         EOSLIB_SERIALIZE( swapparams, (in_swap_fee)(out_swap_min_amount)(chain_id) )
       };
 
       struct [[eosio::table]] chains {

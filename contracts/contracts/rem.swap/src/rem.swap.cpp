@@ -38,7 +38,7 @@ namespace eosio {
                                                                                    "than the swap fee");
       time_point swap_timepoint = swap_timestamp.to_time_point();
 
-      string swap_payload = join({swap_pubkey.substr(3), txid, swap_params_data.remchain_id, quantity.to_string(),
+      string swap_payload = join({swap_pubkey.substr(3), txid, swap_params_data.chain_id, quantity.to_string(),
                                   return_address, return_chain_id, std::to_string(swap_timepoint.sec_since_epoch())});
 
       checksum256 swap_hash = sha256(swap_payload);
@@ -219,11 +219,11 @@ namespace eosio {
       swap_params_table.set(swap_params_data, same_payer);
    }
 
-   void swap::setchainid(const string &remchain_id) {
+   void swap::setchainid(const string &chain_id) {
       require_auth( _self );
-      check(!remchain_id.empty(), "invalid chain-id");
+      check(!chain_id.empty(), "invalid chain id");
 
-      swap_params_data.remchain_id = remchain_id;
+      swap_params_data.chain_id = chain_id;
       swap_params_table.set(swap_params_data, same_payer);
    }
 
@@ -251,7 +251,7 @@ namespace eosio {
 
       time_point swap_timepoint = swap_timestamp.to_time_point();
 
-      string swap_payload = join({swap_pubkey_str.substr(3), txid, swap_params_data.remchain_id, quantity.to_string(),
+      string swap_payload = join({swap_pubkey_str.substr(3), txid, swap_params_data.chain_id, quantity.to_string(),
                                   return_address, return_chain_id, std::to_string(swap_timepoint.sec_since_epoch())});
 
       checksum256 swap_hash = sha256(swap_payload);
@@ -266,7 +266,7 @@ namespace eosio {
 
       time_point swap_timepoint = swap_timestamp.to_time_point();
 
-      string payload = join({txid, swap_params_data.remchain_id, quantity.to_string(), return_address,
+      string payload = join({txid, swap_params_data.chain_id, quantity.to_string(), return_address,
                              return_chain_id, std::to_string(swap_timepoint.sec_since_epoch())});
 
       string sign_payload = (owner_key.size() == 0) ? join({receiver.to_string(), payload}) :

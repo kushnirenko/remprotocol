@@ -224,10 +224,10 @@ public:
       return r;
    }
 
-   auto setchainid(const string &remchain_id) {
+   auto setchainid(const string &chain_id) {
       vector<permission_level> level = {{N(rem.swap), config::active_name}, {N(rem), config::active_name}};
       auto r = base_tester::push_action(N(rem.swap), N(setchainid), level, mvo()
-         ("remchain_id", remchain_id)
+         ("chain_id", chain_id)
       );
       produce_block();
       return r;
@@ -1250,7 +1250,7 @@ BOOST_FIXTURE_TEST_CASE(set_chain_id_test, swap_tester) {
    try {
       string expected_chain_id("0x", 32);
       setchainid(expected_chain_id);
-      auto chain_id = get_singtable(N(rem.swap), N(swapparams), "swapparams")["remchain_id"];
+      auto chain_id = get_singtable(N(rem.swap), N(swapparams), "swapparams")["chain_id"];
       BOOST_REQUIRE_EQUAL(chain_id.as_string(), expected_chain_id);
       // invalid chain-id
       BOOST_REQUIRE_THROW(setchainid(""), eosio_assert_message_exception);
