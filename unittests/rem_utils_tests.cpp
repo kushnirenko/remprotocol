@@ -89,6 +89,17 @@ public:
       return r;
    }
 
+   auto addchain(const name &chain_id, const bool &input, const bool& output, const vector<permission_level>& level) {
+
+      auto r = base_tester::push_action(N(rem.swap), N(addchain), level, mvo()
+            ("chain_id", chain_id)
+            ("input", input)
+            ("output", output)
+      );
+      produce_block();
+      return r;
+   }
+
    auto validate_address(const name& user, const name& chain_id, const string& address) {
       auto r = base_tester::push_action(N(rem.utils), N(validateaddr), user, mvo()
               ("chain_id",  chain_id)
@@ -135,7 +146,7 @@ public:
 utils_tester::utils_tester() {
    // Create rem.msig and rem.token, rem.utils
    create_accounts({N(rem.msig), N(rem.token), N(rem.rex), N(rem.ram),
-                    N(rem.ramfee), N(rem.stake), N(rem.bpay), N(rem.spay), N(rem.vpay), N(rem.saving), N(rem.utils) });
+                    N(rem.ramfee), N(rem.stake), N(rem.swap), N(rem.bpay), N(rem.spay), N(rem.vpay), N(rem.saving), N(rem.utils) });
 
    // Register producers
    const auto producer_candidates = {
@@ -157,6 +168,9 @@ utils_tester::utils_tester() {
    set_code_abi(N(rem.utils),
                 contracts::rem_utils_wasm(),
                 contracts::rem_utils_abi().data()); //, &rem_active_pk);
+   set_code_abi(N(rem.swap),
+                contracts::rem_swap_wasm(),
+                contracts::rem_swap_abi().data()); //, &rem_active_pk);
 
    // Set privileged for rem.msig and rem.token
    set_privileged(N(rem.msig));
@@ -233,6 +247,10 @@ utils_tester::utils_tester() {
    for( const auto& producer : producer_candidates ) {
       register_producer(producer);
    }
+
+   vector<permission_level> auths_level = { permission_level{config::system_account_name, config::active_name},
+                                            permission_level{N(rem.swap), config::active_name}};
+   addchain(N(ethropsten), true, true, auths_level);
 }
 
 BOOST_AUTO_TEST_SUITE(utils_tests)
