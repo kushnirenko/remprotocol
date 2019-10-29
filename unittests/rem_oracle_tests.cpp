@@ -91,7 +91,7 @@ public:
    }
 
    auto updateauth(const name &account, const name& code_account) {
-      auto auth = authority(testing::base_tester::get_public_key(account.to_string(), "active"));
+      auto auth = authority(get_public_key(account, "active"));
       auth.accounts.push_back(permission_level_weight{{code_account, config::rem_code_name}, 1});
 
       auto r = base_tester::push_action(N(rem), N(updateauth), account, mvo()
@@ -148,7 +148,7 @@ public:
    }
 
    variant get_pricedata_tbl( const name& producer ) {
-      vector<char> data = get_row_by_account( N(rem.oracle), N(rem.oracle), N(pricedata), producer.value );
+      vector<char> data = get_row_by_account( N(rem.oracle), N(rem.oracle), N(pricedata), producer );
       return data.empty() ? fc::variant() : abi_ser.binary_to_variant( "pricedata", data, abi_serializer_max_time );
    }
 
@@ -199,7 +199,7 @@ public:
 
 oracle_tester::oracle_tester() {
    // Create rem.msig and rem.token, rem.oracle
-   create_accounts({N(rem.msig), N(rem.token), N(rem.ram), N(rem.ramfee), N(rem.stake), N(rem.bpay), N(rem.spay), N(rem.vpay), N(rem.saving), N(rem.oracle) });
+   create_accounts({N(rem.msig), N(rem.token), N(rem.rex), N(rem.ram), N(rem.ramfee), N(rem.stake), N(rem.bpay), N(rem.spay), N(rem.vpay), N(rem.saving), N(rem.oracle) });
 
    // Register producers
    const auto producer_candidates = {
@@ -359,7 +359,7 @@ BOOST_FIXTURE_TEST_CASE( setprice_test, oracle_tester ) {
 
             auto pricedata = get_pricedata_tbl(producer.producer_name);
 
-            BOOST_TEST_REQUIRE(pricedata["producer"].as_string() == string(producer.producer_name));
+            BOOST_TEST_REQUIRE(pricedata["producer"].as_string() == producer.producer_name.to_string());
             BOOST_TEST_REQUIRE(pricedata["last_update"].as_string() == string(ct));
          }
          ct = control->head_block_time();
@@ -383,7 +383,7 @@ BOOST_FIXTURE_TEST_CASE( setprice_test, oracle_tester ) {
             vector<variant> pair_points(_producers.size(), pair_price[pair]);
 
             BOOST_TEST_REQUIRE(pair_data["price"].as_double() == pair_price[pair]);
-            BOOST_TEST_REQUIRE(pair_data["pair"].as_string() == string(pair));
+            BOOST_TEST_REQUIRE(pair_data["pair"].as_string() == pair.to_string());
             BOOST_TEST_REQUIRE(pair_data["price_points"].get_array() == pair_points);
             BOOST_TEST_REQUIRE(pair_data["last_update"].as_string() == string(ct));
          }
