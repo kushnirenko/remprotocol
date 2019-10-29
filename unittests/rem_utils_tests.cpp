@@ -178,7 +178,8 @@ public:
 
 utils_tester::utils_tester() {
    // Create rem.msig and rem.token, rem.utils
-   create_accounts({N(rem.msig), N(rem.token), N(rem.ram), N(rem.ramfee), N(rem.stake), N(rem.bpay), N(rem.spay), N(rem.vpay), N(rem.saving), TEST_CONTRACT });
+   create_accounts({N(rem.msig), N(rem.token), N(rem.rex), N(rem.ram),
+                    N(rem.ramfee), N(rem.stake), N(rem.bpay), N(rem.spay), N(rem.vpay), N(rem.saving), TEST_CONTRACT });
 
    // Register producers
    const auto producer_candidates = {
