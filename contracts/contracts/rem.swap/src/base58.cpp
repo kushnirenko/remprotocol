@@ -38,33 +38,17 @@ namespace eosio {
       return result;
    }
 
-   enum class key_type : uint8_t {
-      k1 = 0,
-      r1 = 1,
-   };
-
-   template <typename Key, int suffix_size>
-   Key string_to_key(std::string_view s, key_type type, const char (&suffix)[suffix_size]) {
-      static const auto size = std::tuple_size<decltype(Key::data)>::value;
-      auto whole = base58_to_binary<size + 4>(s);
-      Key result{static_cast<uint8_t>(type)};
-      memcpy(result.data.data(), whole.data(), result.data.size());
-      return result;
-   }
-
    eosio::public_key string_to_public_key(std::string_view s) {
-      if (s.size() >= 3 && ( s.substr(0, 3) == "EOS" || s.substr(0, 3) == "REM") ) {
-         auto whole = base58_to_binary<37>(s.substr(3));
-         eosio::public_key key{static_cast<uint8_t>(key_type::k1)};
-         check(whole.size() == key.data.size() + 4, "Error: whole.size() != key.data.size() + 4");
-         memcpy(key.data.data(), whole.data(), key.data.size());
-         return key;
-      } else if (s.size() >= 7 && s.substr(0, 7) == "PUB_R1_") {
-         return string_to_key<eosio::public_key>(s.substr(7), key_type::r1, "R1");
-      } else {
-         check(false, "unrecognized public key format");
-         return eosio::public_key{};
-      }
+      eosio::public_key key;
+      bool is_k1_type = s.size() >= 3 && ( s.substr(0, 3) == "EOS" || s.substr(0, 3) == "REM");
+      bool is_r1_type = s.size() >= 7 && s.substr(0, 7) == "PUB_R1_";
+
+      check(is_k1_type || is_r1_type, "unrecognized public key format");
+      auto whole = base58_to_binary<37>( is_k1_type ? s.substr(3) : s.substr(7) );
+      check(whole.size() == std::get_if<0>(&key)->size() + 4, "invalid public key length");
+
+      memcpy(std::get_if<0>(&key)->data(), whole.data(), std::get_if<0>(&key)->size());
+      return key;
    }
 
 } // namespace eosio
