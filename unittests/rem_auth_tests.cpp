@@ -174,6 +174,23 @@ public:
       return r;
    }
 
+   auto setprice(const name& producer, std::map<name, double> &pairs_data) {
+      auto r = base_tester::push_action(N(rem.oracle), N(setprice), producer, mvo()
+         ("producer",  name(producer))
+         ("pairs_data", pairs_data )
+      );
+      produce_block();
+      return r;
+   }
+
+   auto addpair(const name& pair, const vector<permission_level>& level) {
+      auto r = base_tester::push_action(N(rem.oracle), N(addpair), level, mvo()
+         ("pair", pair )
+      );
+      produce_block();
+      return r;
+   }
+
    auto register_producer(name producer) {
       auto r = base_tester::push_action(config::system_account_name, N(regproducer), producer, mvo()
          ("producer",  name(producer))
@@ -247,7 +264,8 @@ public:
 
 rem_auth_tester::rem_auth_tester() {
    // Create rem.msig and rem.token, rem.auth
-   create_accounts({N(rem.msig), N(rem.token), N(rem.rex), N(rem.ram), N(rem.ramfee), N(rem.stake), N(rem.bpay), N(rem.spay), N(rem.vpay), N(rem.saving), N(rem.auth) });
+   create_accounts({N(rem.msig), N(rem.token), N(rem.rex), N(rem.ram), N(rem.ramfee), N(rem.oracle),
+                    N(rem.stake), N(rem.bpay), N(rem.spay), N(rem.vpay), N(rem.saving), N(rem.auth) });
 
    // Register producers
    const auto producer_candidates = {
@@ -269,6 +287,9 @@ rem_auth_tester::rem_auth_tester() {
    set_code_abi(N(rem.auth),
                 contracts::rem_auth_wasm(),
                 contracts::rem_auth_abi().data()); //, &rem_active_pk);
+   set_code_abi(N(rem.oracle),
+                contracts::rem_oracle_wasm(),
+                contracts::rem_oracle_abi().data()); //, &rem_active_pk);
 
    // Set privileged for rem.msig and rem.token
    set_privileged(N(rem.msig));
@@ -348,6 +369,23 @@ rem_auth_tester::rem_auth_tester() {
       register_producer(producer);
    }
    updateauth(N(rem.auth), N(rem.auth));
+
+   // add new supported pairs to the rem.oracle
+   vector<name> supported_pairs = {
+      N(rem.usd), N(rem.eth), N(rem.btc),
+   };
+   for (const auto &pair : supported_pairs) {
+      addpair(pair, { {N(rem.oracle), config::active_name} });
+   }
+   map<name, double> pair_price {
+      {N(rem.usd), 0.003210},
+      {N(rem.btc), 0.0000003957},
+      {N(rem.eth), 0.0000176688}
+   };
+   const auto _producers = control->head_block_state()->active_schedule.producers;
+   for (const auto &producer : _producers) {
+      setprice(producer.producer_name, pair_price);
+   }
 }
 
 BOOST_AUTO_TEST_SUITE(rem_auth_tests)

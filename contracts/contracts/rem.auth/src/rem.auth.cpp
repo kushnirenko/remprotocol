@@ -142,8 +142,7 @@ namespace eosio {
       check(quantity.amount > 0, "quantity should be a positive value");
       check(quantity.symbol == auth_symbol, "symbol precision mismatch");
 
-//      double remusd = get_remusd_price(); // TODO: implement method get_remusd_price from oracle table remusd
-      double remusd = 0.002819;
+      double remusd = get_market_price("rem.usd"_n);
 
       check(max_price > remusd, "currently rem-usd price is above maximum price");
       asset purchase_fee = get_authrem_price(quantity);
@@ -203,17 +202,16 @@ namespace eosio {
       return it == accountstable.end() ? asset{0, sym} : it->balance;
    }
 
-//   double auth::get_remusd_price() const {
-//      remprice_inx remprice_table(oracle_contract, oracle_contract.value);
-//      auto it = remprice_table.find("rem.usd"_n.value);
-//      check(it != remprice_table.end(), "error pair is changed");
-//      return it->price;
-//   }
+   double auth::get_market_price(const name &pair) const {
+      remprice_inx remprice_table(oracle_contract, oracle_contract.value);
+      auto it = remprice_table.find(pair.value);
+      check(it != remprice_table.end(), "pair does not exist");
+      return it->price;
+   }
 
    asset auth::get_authrem_price(const asset &quantity)
    {
-//      double remusd = get_remusd_price();
-      double remusd = 0.002819;
+      double remusd = get_market_price("rem.usd"_n);
       double rem_amount = quantity.amount / remusd;
       return asset{static_cast<int64_t>(rem_amount), system_contract::get_core_symbol()};
    }

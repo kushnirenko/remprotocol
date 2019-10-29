@@ -187,7 +187,7 @@ namespace eosio {
       auto get_authkey_it(const authkeys_idx &authkeys_tbl, const name &account, const public_key &key);
       asset get_balance( const name& token_contract_account, const name& owner, const symbol& sym );
       asset get_authrem_price(const asset &quantity);
-      double get_remusd_price() const;
+      double get_market_price(const name &pair) const;
 
       void require_app_auth(const name &account, const public_key &key);
       bool assert_recover_key(const checksum256 &digest, const signature &sign, const public_key &key);
