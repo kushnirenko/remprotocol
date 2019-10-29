@@ -18,9 +18,9 @@ const static auto forkdb_filename            = "fork_db.dat";
 const static auto default_state_size            = 1*1024*1024*1024ll;
 const static auto default_state_guard_size      =    128*1024*1024ll;
 
-
 const static name system_account_name    { N(rem) };
 const static name swap_account_name      { N(rem.swap) };
+const static name oracle_account_name    { N(rem.oracle) };
 const static name attribute_account_name { N(rem.attr) };
 const static name null_account_name      { N(rem.null) };
 const static name producers_account_name { N(rem.prods) };
