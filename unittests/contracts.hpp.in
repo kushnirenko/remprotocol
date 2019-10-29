@@ -29,6 +29,7 @@ namespace eosio {
          MAKE_READ_WASM_ABI(rem_attr,   rem.attr,   ../contracts/contracts)
          MAKE_READ_WASM_ABI(rem_bios,   rem.bios, ../contracts/contracts)
          MAKE_READ_WASM_ABI(rem_msig,   rem.msig, ../contracts/contracts)
+         MAKE_READ_WASM_ABI(rem_oracle,   rem.oracle, ../contracts/contracts)
          MAKE_READ_WASM_ABI(rem_system, rem.system, ../contracts/contracts)
          MAKE_READ_WASM_ABI(rem_token,  rem.token,  ../contracts/contracts)
          MAKE_READ_WASM_ABI(rem_wrap,   rem.wrap,   ../contracts/contracts)

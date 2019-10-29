@@ -19,6 +19,7 @@ set(VOTING_ICON_URI   "voting.png#db28cd3db6e62d4509af3644ce7d377329482a14bb4bfa
 add_subdirectory(rem.attr)
 add_subdirectory(rem.bios)
 add_subdirectory(rem.msig)
+add_subdirectory(rem.oracle)
 add_subdirectory(rem.system)
 add_subdirectory(rem.token)
 add_subdirectory(rem.wrap)
