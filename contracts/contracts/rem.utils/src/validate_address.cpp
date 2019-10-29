@@ -52,11 +52,4 @@ namespace eosio {
       }
       return s;
    }
-
-   void utils::add_chain(const name& chain_id, const asset& fee) {
-      swap_fee_table.emplace( _self, [&]( auto& row ) {
-         row.chain = chain_id;
-         row.fee = fee;
-      });
-   }
 } /// namespace eosio

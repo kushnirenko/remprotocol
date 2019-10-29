@@ -27,50 +27,6 @@ using namespace fc;
 
 using mvo = fc::mutable_variant_object;
 
-struct rem_genesis_account {
-   account_name name;
-   uint64_t     initial_balance;
-};
-
-std::vector<rem_genesis_account> genesis_test( {
-    {N(b1),        100'000'000'0000ll},
-    {N(whale1),     40'000'000'0000ll},
-    {N(whale2),     30'000'000'0000ll},
-    {N(whale3),     20'000'000'0000ll},
-    {N(proda),         500'000'0000ll},
-    {N(prodb),         500'000'0000ll},
-    {N(prodc),         500'000'0000ll},
-    {N(prodd),         500'000'0000ll},
-    {N(prode),         500'000'0000ll},
-    {N(prodf),         500'000'0000ll},
-    {N(prodg),         500'000'0000ll},
-    {N(prodh),         500'000'0000ll},
-    {N(prodi),         500'000'0000ll},
-    {N(prodj),         500'000'0000ll},
-    {N(prodk),         500'000'0000ll},
-    {N(prodl),         500'000'0000ll},
-    {N(prodm),         500'000'0000ll},
-    {N(prodn),         500'000'0000ll},
-    {N(prodo),         500'000'0000ll},
-    {N(prodp),         500'000'0000ll},
-    {N(prodq),         500'000'0000ll},
-    {N(prodr),         500'000'0000ll},
-    {N(prods),         500'000'0000ll},
-    {N(prodt),         500'000'0000ll},
-    {N(produ),         500'000'0000ll},
-    {N(runnerup1),     200'000'0000ll},
-    {N(runnerup2),     150'000'0000ll},
-    {N(runnerup3),     100'000'0000ll},
-});
-
-const char* SYMBOL_CORE_NAME = "REM";
-const name TEST_CONTRACT = N(rem.utils);
-
-symbol CORE_SYMBOL_STR(4, SYMBOL_CORE_NAME);
-
-name ETHCHAINID = N(ethropsten);
-string ETHADDRESS = "0x9fB8A18fF402680b47387AE0F4e38229EC64f098";
-
 class utils_tester : public TESTER {
 public:
    utils_tester();
@@ -134,7 +90,7 @@ public:
    }
 
    auto validate_address(const name& user, const name& chain_id, const string& address) {
-      auto r = base_tester::push_action(TEST_CONTRACT, N(validateaddr), user, mvo()
+      auto r = base_tester::push_action(N(rem.utils), N(validateaddr), user, mvo()
               ("chain_id",  chain_id)
               ("address", address )
       );
@@ -143,7 +99,7 @@ public:
    }
 
    auto set_swap_fee(const name& chain_id, const asset& fee) {
-      auto r = base_tester::push_action(TEST_CONTRACT, N(setswapfee), N(rem.utils), mvo()
+      auto r = base_tester::push_action(N(rem.utils), N(setswapfee), N(rem.utils), mvo()
               ("chain_id",  chain_id)
               ("fee", fee )
       );
@@ -152,7 +108,7 @@ public:
    }
 
    fc::variant get_swap_fee_info( const name& chain_id ) {
-      vector<char> data = get_row_by_account( TEST_CONTRACT, TEST_CONTRACT, N(swapfee), chain_id );
+      vector<char> data = get_row_by_account( N(rem.utils), N(rem.utils), N(swapfee), chain_id );
       return data.empty() ? fc::variant() : abi_ser.binary_to_variant( "swap_fee", data, abi_serializer_max_time );
    }
 
@@ -164,7 +120,7 @@ public:
       wdump((account));
       set_code(account, wasm, signer);
       set_abi(account, abi, signer);
-      if (account == TEST_CONTRACT) {
+      if (account == N(rem.utils)) {
          const auto& accnt = control->db().get<account_object,by_name>( account );
          abi_def abi_definition;
          BOOST_REQUIRE_EQUAL(abi_serializer::to_abi(accnt.abi, abi_definition), true);
@@ -178,7 +134,8 @@ public:
 
 utils_tester::utils_tester() {
    // Create rem.msig and rem.token, rem.utils
-   create_accounts({N(rem.msig), N(rem.token), N(rem.ram), N(rem.ramfee), N(rem.stake), N(rem.bpay), N(rem.spay), N(rem.vpay), N(rem.saving), TEST_CONTRACT });
+   create_accounts({N(rem.msig), N(rem.token), N(rem.rex), N(rem.ram),
+                    N(rem.ramfee), N(rem.stake), N(rem.bpay), N(rem.spay), N(rem.vpay), N(rem.saving), N(rem.utils) });
 
    // Register producers
    const auto producer_candidates = {
@@ -197,7 +154,7 @@ utils_tester::utils_tester() {
    set_code_abi(N(rem.token),
                 contracts::rem_token_wasm(),
                 contracts::rem_token_abi().data()); //, &rem_active_pk);
-   set_code_abi(TEST_CONTRACT,
+   set_code_abi(N(rem.utils),
                 contracts::rem_utils_wasm(),
                 contracts::rem_utils_abi().data()); //, &rem_active_pk);
 
@@ -222,6 +179,42 @@ utils_tester::utils_tester() {
    auto actual = get_balance(config::system_account_name);
    BOOST_REQUIRE_EQUAL(initial_supply, actual);
 
+   struct rem_genesis_account {
+      account_name name;
+      uint64_t     initial_balance;
+   };
+
+   std::vector<rem_genesis_account> genesis_test( {
+       {N(b1),        100'000'000'0000ll},
+       {N(whale1),     40'000'000'0000ll},
+       {N(whale2),     30'000'000'0000ll},
+       {N(whale3),     20'000'000'0000ll},
+       {N(proda),         500'000'0000ll},
+       {N(prodb),         500'000'0000ll},
+       {N(prodc),         500'000'0000ll},
+       {N(prodd),         500'000'0000ll},
+       {N(prode),         500'000'0000ll},
+       {N(prodf),         500'000'0000ll},
+       {N(prodg),         500'000'0000ll},
+       {N(prodh),         500'000'0000ll},
+       {N(prodi),         500'000'0000ll},
+       {N(prodj),         500'000'0000ll},
+       {N(prodk),         500'000'0000ll},
+       {N(prodl),         500'000'0000ll},
+       {N(prodm),         500'000'0000ll},
+       {N(prodn),         500'000'0000ll},
+       {N(prodo),         500'000'0000ll},
+       {N(prodp),         500'000'0000ll},
+       {N(prodq),         500'000'0000ll},
+       {N(prodr),         500'000'0000ll},
+       {N(prods),         500'000'0000ll},
+       {N(prodt),         500'000'0000ll},
+       {N(produ),         500'000'0000ll},
+       {N(runnerup1),     200'000'0000ll},
+       {N(runnerup2),     150'000'0000ll},
+       {N(runnerup3),     100'000'0000ll},
+   });
+
    // Create genesis accounts
    for( const auto& account : genesis_test ) {
       create_account( account.name, config::system_account_name );
@@ -245,106 +238,75 @@ utils_tester::utils_tester() {
 BOOST_AUTO_TEST_SUITE(utils_tests)
 
 BOOST_FIXTURE_TEST_CASE( validate_eth_address_test, utils_tester ) {
+   name ethchainid = N(ethropsten);
+   string ethaddress = "0x9fB8A18fF402680b47387AE0F4e38229EC64f098";
    try {
-      validate_address(N(proda), ETHCHAINID, ETHADDRESS);
+      validate_address(N(proda), ethchainid, ethaddress);
    } FC_LOG_AND_RETHROW()
 }
 
 BOOST_FIXTURE_TEST_CASE( validate_eth_address_test_without_hexpre, utils_tester ) {
    try {
+      name ethchainid = N(ethropsten);
       string address = "9fB8A18fF402680b47387AE0F4e38229EC64f098";
 
-      validate_address(N(proda), ETHCHAINID, address);
+      validate_address(N(proda), ethchainid, address);
    } FC_LOG_AND_RETHROW()
 }
 
 BOOST_FIXTURE_TEST_CASE( validate_eth_address_test_with_non_existed_chain_id, utils_tester ) {
    try {
       name ethchainid = N(nonexchain);
-
+      string ethaddress = "0x9fB8A18fF402680b47387AE0F4e38229EC64f098";
       // not supported chain id
-      BOOST_REQUIRE_THROW(validate_address(N(proda), ethchainid, ETHADDRESS), eosio_assert_message_exception);
+      BOOST_REQUIRE_THROW(validate_address(N(proda), ethchainid, ethaddress), eosio_assert_message_exception);
    } FC_LOG_AND_RETHROW()
 }
 
 BOOST_FIXTURE_TEST_CASE( validate_eth_address_test_with_non_existed_account, utils_tester ) {
    try {
+      name ethchainid = N(ethropsten);
+      string ethaddress = "0x9fB8A18fF402680b47387AE0F4e38229EC64f098";
       // auth error
-      BOOST_REQUIRE_THROW(validate_address(N(fail), ETHCHAINID, ETHADDRESS), transaction_exception);
+      BOOST_REQUIRE_THROW(validate_address(N(fail), ethchainid, ethaddress), transaction_exception);
    } FC_LOG_AND_RETHROW()
 }
 
 BOOST_FIXTURE_TEST_CASE( validate_eth_address_test_with_address_invalid_length, utils_tester ) {
    try {
+      name ethchainid = N(ethropsten);
       string address = "0x9f21f19180c8692eb";
 
       // invalid address length
-      BOOST_REQUIRE_THROW(validate_address(N(proda), ETHCHAINID, address), eosio_assert_message_exception);
+      BOOST_REQUIRE_THROW(validate_address(N(proda), ethchainid, address), eosio_assert_message_exception);
    } FC_LOG_AND_RETHROW()
 }
 
 BOOST_FIXTURE_TEST_CASE( validate_eth_address_test_with_address_invalid_symbol, utils_tester ) {
    try {
+      name ethchainid = N(ethropsten);
       string address = "0x9fB8A18fF402680b47387AE0F4e38229EC64f09%";
 
       // invalid hex symbol in ethereum address
-      BOOST_REQUIRE_THROW(validate_address(N(proda), ETHCHAINID, address), eosio_assert_message_exception);
+      BOOST_REQUIRE_THROW(validate_address(N(proda), ethchainid, address), eosio_assert_message_exception);
    } FC_LOG_AND_RETHROW()
 }
 
 BOOST_FIXTURE_TEST_CASE( validate_eth_address_invalid_checksum, utils_tester ) {
    try {
+      name ethchainid = N(ethropsten);
       // valid address all upper
       string address = "0x8617E340B3D01FA5F11F306F4090FD50E238070D";
-      validate_address(N(proda), ETHCHAINID, address);
+      validate_address(N(proda), ethchainid, address);
 
       address = "0x9fB8A18fF402680b47387AE0F4e38229EC64f097";
       // invalid ethereum address checksum
-      BOOST_REQUIRE_THROW(validate_address(N(proda), ETHCHAINID, address), eosio_assert_message_exception);
+      BOOST_REQUIRE_THROW(validate_address(N(proda), ethchainid, address), eosio_assert_message_exception);
 
       // valid address all lower
       address = "0xd423ae43105a0185c18f968cd8be0fa276689c04";
       // invalid ethereum address checksum
-      BOOST_REQUIRE_THROW(validate_address(N(proda), ETHCHAINID, address), eosio_assert_message_exception);
-   } FC_LOG_AND_RETHROW()
-}
-
-BOOST_FIXTURE_TEST_CASE( set_swap_fee_test, utils_tester ) {
-   try {
-      validate_address(N(proda), ETHCHAINID, ETHADDRESS); // for initialization constructor
-
-      auto swap_fee_table = get_swap_fee_info(ETHCHAINID);
-      asset swap_fee = asset{500000, CORE_SYMBOL_STR};
-      BOOST_REQUIRE_EQUAL(swap_fee.to_string(), swap_fee_table["fee"].as_string());
-
-      asset updated_swap_fee = asset{1000000, CORE_SYMBOL_STR};
-      set_swap_fee(ETHCHAINID, updated_swap_fee);
-      swap_fee_table = get_swap_fee_info(ETHCHAINID);
-      BOOST_REQUIRE_EQUAL(updated_swap_fee.to_string(), swap_fee_table["fee"].as_string());
-   } FC_LOG_AND_RETHROW()
-}
-
-BOOST_FIXTURE_TEST_CASE( set_swap_fee_test_non_existed_chain_id, utils_tester ) {
-   try {
-      asset swap_fee = asset{500000, CORE_SYMBOL_STR};
-      // not supported chain id
-      BOOST_REQUIRE_THROW(set_swap_fee(N(fail), swap_fee), eosio_assert_message_exception);
-   } FC_LOG_AND_RETHROW()
-}
-
-BOOST_FIXTURE_TEST_CASE( set_swap_fee_test_with_negative_amount, utils_tester ) {
-   try {
-      asset swap_fee = asset{-1, CORE_SYMBOL_STR};
-      // must transfer positive quantity
-      BOOST_REQUIRE_THROW(set_swap_fee(ETHCHAINID, swap_fee), eosio_assert_message_exception);
-   } FC_LOG_AND_RETHROW()
-}
-
-BOOST_FIXTURE_TEST_CASE( set_swap_fee_test_with_another_symbol, utils_tester ) {
-   try {
-      asset swap_fee = asset{-1, symbol(4, "SYS")};
-      // symbol precision mismatch
-      BOOST_REQUIRE_THROW(set_swap_fee(ETHCHAINID, swap_fee), eosio_assert_message_exception);
+      BOOST_REQUIRE_THROW(validate_address(N(proda), ethchainid, address), eosio_assert_message_exception);
    } FC_LOG_AND_RETHROW()
 }
 
