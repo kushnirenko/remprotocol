@@ -130,7 +130,7 @@ public:
     }
 
     auto transfer( name from, name to, asset quantity ) {
-       auto r = push_action( N(rem.token), N(transfer), config::system_account_name, 
+       auto r = push_action( N(rem.token), N(transfer), config::system_account_name,
                              mutable_variant_object()
                              ("from", from)
                              ("to", to)
@@ -205,13 +205,13 @@ public:
        vector<char> data = get_row_by_account( config::system_account_name, config::system_account_name, N(producers), act );
        return abi_ser.binary_to_variant( "producer_info", data, abi_serializer_max_time );
     }
- 
+
     fc::variant get_voter_info( const account_name& act ) {
        vector<char> data = get_row_by_account( config::system_account_name, config::system_account_name, N(voters), act );
        return data.empty() ? fc::variant() : abi_ser.binary_to_variant( "voter_info", data, abi_serializer_max_time );
     }
 
- 
+
     // Vote for producers
     void votepro( account_name voter, vector<account_name> producers ) {
        std::sort( producers.begin(), producers.end() );
@@ -234,8 +234,18 @@ public:
        return r;
    }
 
+   auto refund_to_stake( const name& to ) {
+      auto r = base_tester::push_action(
+         config::system_account_name, N(refundtostake), to,
+         mvo()("owner", to)
+      );
+
+      produce_block();
+      return r;
+   }
+
     fc::microseconds microseconds_since_epoch_of_iso_string( const fc::variant& v ) {
-        return static_cast<fc::microseconds>( time_point::from_iso_string( v.as_string() ).time_since_epoch().count() );
+        return time_point::from_iso_string( v.as_string() ).time_since_epoch();
     }
 
     abi_serializer abi_ser;
@@ -243,7 +253,9 @@ public:
 
 voting_tester::voting_tester() {
    // Create rem.msig and rem.token
-   create_accounts({N(rem.msig), N(rem.token), N(rem.ram), N(rem.ramfee), N(rem.stake), N(rem.bpay), N(rem.spay), N(rem.vpay), N(rem.saving) });
+   create_accounts({N(rem.msig), N(rem.token), N(rem.rex), N(rem.ram),
+                    N(rem.ramfee), N(rem.stake), N(rem.bpay),
+                    N(rem.spay), N(rem.vpay), N(rem.saving)});
 
    // Set code for the following accounts:
    //  - rem (code: rem.bios) (already set by tester constructor)
@@ -330,15 +342,6 @@ BOOST_FIXTURE_TEST_CASE( rem_voting_test, voting_tester ) {
            register_producer(producer);
         }
 
-        // whale3 is not a producer so can't vote
-        BOOST_REQUIRE_THROW( votepro( N(whale3), {N(runnerup1), N(runnerup2), N(runnerup3)} ), eosio_assert_message_exception );
-
-        // register whales as producers
-        const auto whales_as_producers = { N(b1), N(whale1), N(whale2) };
-        for( const auto& producer : whales_as_producers ) {
-           register_producer(producer);
-        }
-
         votepro( N(whale1), {N(proda), N(prodb), N(prodc), N(prodd), N(prode), N(prodf), N(prodg),
                              N(prodh), N(prodi), N(prodj), N(prodk), N(prodl), N(prodm), N(prodn),
                              N(prodo), N(prodp), N(prodq), N(prodr), N(prods), N(prodt), N(produ)} );
@@ -353,7 +356,7 @@ BOOST_FIXTURE_TEST_CASE( rem_voting_test, voting_tester ) {
         produce_blocks_for_n_rounds(2); // 2 rounds since new producer schedule is set when the first block of next round is irreversible
         auto active_schedule = control->head_block_state()->active_schedule;
         BOOST_TEST(active_schedule.producers.size() == 1u);
-        BOOST_TEST(active_schedule.producers.front().producer_name == "rem");
+        BOOST_TEST(active_schedule.producers.front().producer_name == name("rem"));
 
         // This will increase the total vote stake by (1'000'000'000'000 - 1,000)
         votepro( N(b1), {N(proda), N(prodb), N(prodc), N(prodd), N(prode), N(prodf), N(prodg),
@@ -366,27 +369,27 @@ BOOST_FIXTURE_TEST_CASE( rem_voting_test, voting_tester ) {
         produce_blocks_for_n_rounds(2); // 2 rounds since new producer schedule is set when the first block of next round is irreversible
         active_schedule = control->head_block_state()->active_schedule;
         BOOST_REQUIRE(active_schedule.producers.size() == 21);
-        BOOST_TEST(active_schedule.producers.at(0).producer_name == "proda");
-        BOOST_TEST(active_schedule.producers.at(1).producer_name == "prodb");
-        BOOST_TEST(active_schedule.producers.at(2).producer_name == "prodc");
-        BOOST_TEST(active_schedule.producers.at(3).producer_name == "prodd");
-        BOOST_TEST(active_schedule.producers.at(4).producer_name == "prode");
-        BOOST_TEST(active_schedule.producers.at(5).producer_name == "prodf");
-        BOOST_TEST(active_schedule.producers.at(6).producer_name == "prodg");
-        BOOST_TEST(active_schedule.producers.at(7).producer_name == "prodh");
-        BOOST_TEST(active_schedule.producers.at(8).producer_name == "prodi");
-        BOOST_TEST(active_schedule.producers.at(9).producer_name == "prodj");
-        BOOST_TEST(active_schedule.producers.at(10).producer_name == "prodk");
-        BOOST_TEST(active_schedule.producers.at(11).producer_name == "prodl");
-        BOOST_TEST(active_schedule.producers.at(12).producer_name == "prodm");
-        BOOST_TEST(active_schedule.producers.at(13).producer_name == "prodn");
-        BOOST_TEST(active_schedule.producers.at(14).producer_name == "prodo");
-        BOOST_TEST(active_schedule.producers.at(15).producer_name == "prodp");
-        BOOST_TEST(active_schedule.producers.at(16).producer_name == "prodq");
-        BOOST_TEST(active_schedule.producers.at(17).producer_name == "prodr");
-        BOOST_TEST(active_schedule.producers.at(18).producer_name == "prods");
-        BOOST_TEST(active_schedule.producers.at(19).producer_name == "prodt");
-        BOOST_TEST(active_schedule.producers.at(20).producer_name == "produ");
+        BOOST_TEST(active_schedule.producers.at(0).producer_name == name("proda"));
+        BOOST_TEST(active_schedule.producers.at(1).producer_name == name("prodb"));
+        BOOST_TEST(active_schedule.producers.at(2).producer_name == name("prodc"));
+        BOOST_TEST(active_schedule.producers.at(3).producer_name == name("prodd"));
+        BOOST_TEST(active_schedule.producers.at(4).producer_name == name("prode"));
+        BOOST_TEST(active_schedule.producers.at(5).producer_name == name("prodf"));
+        BOOST_TEST(active_schedule.producers.at(6).producer_name == name("prodg"));
+        BOOST_TEST(active_schedule.producers.at(7).producer_name == name("prodh"));
+        BOOST_TEST(active_schedule.producers.at(8).producer_name == name("prodi"));
+        BOOST_TEST(active_schedule.producers.at(9).producer_name == name("prodj"));
+        BOOST_TEST(active_schedule.producers.at(10).producer_name == name("prodk"));
+        BOOST_TEST(active_schedule.producers.at(11).producer_name == name("prodl"));
+        BOOST_TEST(active_schedule.producers.at(12).producer_name == name("prodm"));
+        BOOST_TEST(active_schedule.producers.at(13).producer_name == name("prodn"));
+        BOOST_TEST(active_schedule.producers.at(14).producer_name == name("prodo"));
+        BOOST_TEST(active_schedule.producers.at(15).producer_name == name("prodp"));
+        BOOST_TEST(active_schedule.producers.at(16).producer_name == name("prodq"));
+        BOOST_TEST(active_schedule.producers.at(17).producer_name == name("prodr"));
+        BOOST_TEST(active_schedule.producers.at(18).producer_name == name("prods"));
+        BOOST_TEST(active_schedule.producers.at(19).producer_name == name("prodt"));
+        BOOST_TEST(active_schedule.producers.at(20).producer_name == name("produ"));
     } FC_LOG_AND_RETHROW()
 }
 
@@ -433,27 +436,27 @@ BOOST_FIXTURE_TEST_CASE( rem_vote_reassertion_test, voting_tester ) {
       produce_blocks_for_n_rounds(2); // 2 rounds since new producer schedule is set when the first block of next round is irreversible
       const auto active_schedule = control->head_block_state()->active_schedule;
       BOOST_REQUIRE(active_schedule.producers.size() == 21);
-      BOOST_TEST(active_schedule.producers.at(0).producer_name == "proda");
-      BOOST_TEST(active_schedule.producers.at(1).producer_name == "prodb");
-      BOOST_TEST(active_schedule.producers.at(2).producer_name == "prodc");
-      BOOST_TEST(active_schedule.producers.at(3).producer_name == "prodd");
-      BOOST_TEST(active_schedule.producers.at(4).producer_name == "prode");
-      BOOST_TEST(active_schedule.producers.at(5).producer_name == "prodf");
-      BOOST_TEST(active_schedule.producers.at(6).producer_name == "prodg");
-      BOOST_TEST(active_schedule.producers.at(7).producer_name == "prodh");
-      BOOST_TEST(active_schedule.producers.at(8).producer_name == "prodi");
-      BOOST_TEST(active_schedule.producers.at(9).producer_name == "prodj");
-      BOOST_TEST(active_schedule.producers.at(10).producer_name == "prodk");
-      BOOST_TEST(active_schedule.producers.at(11).producer_name == "prodl");
-      BOOST_TEST(active_schedule.producers.at(12).producer_name == "prodm");
-      BOOST_TEST(active_schedule.producers.at(13).producer_name == "prodn");
-      BOOST_TEST(active_schedule.producers.at(14).producer_name == "prodo");
-      BOOST_TEST(active_schedule.producers.at(15).producer_name == "prodp");
-      BOOST_TEST(active_schedule.producers.at(16).producer_name == "prodq");
-      BOOST_TEST(active_schedule.producers.at(17).producer_name == "prodr");
-      BOOST_TEST(active_schedule.producers.at(18).producer_name == "prods");
-      BOOST_TEST(active_schedule.producers.at(19).producer_name == "prodt");
-      BOOST_TEST(active_schedule.producers.at(20).producer_name == "produ");
+      BOOST_TEST(active_schedule.producers.at(0).producer_name == name("proda"));
+      BOOST_TEST(active_schedule.producers.at(1).producer_name == name("prodb"));
+      BOOST_TEST(active_schedule.producers.at(2).producer_name == name("prodc"));
+      BOOST_TEST(active_schedule.producers.at(3).producer_name == name("prodd"));
+      BOOST_TEST(active_schedule.producers.at(4).producer_name == name("prode"));
+      BOOST_TEST(active_schedule.producers.at(5).producer_name == name("prodf"));
+      BOOST_TEST(active_schedule.producers.at(6).producer_name == name("prodg"));
+      BOOST_TEST(active_schedule.producers.at(7).producer_name == name("prodh"));
+      BOOST_TEST(active_schedule.producers.at(8).producer_name == name("prodi"));
+      BOOST_TEST(active_schedule.producers.at(9).producer_name == name("prodj"));
+      BOOST_TEST(active_schedule.producers.at(10).producer_name == name("prodk"));
+      BOOST_TEST(active_schedule.producers.at(11).producer_name == name("prodl"));
+      BOOST_TEST(active_schedule.producers.at(12).producer_name == name("prodm"));
+      BOOST_TEST(active_schedule.producers.at(13).producer_name == name("prodn"));
+      BOOST_TEST(active_schedule.producers.at(14).producer_name == name("prodo"));
+      BOOST_TEST(active_schedule.producers.at(15).producer_name == name("prodp"));
+      BOOST_TEST(active_schedule.producers.at(16).producer_name == name("prodq"));
+      BOOST_TEST(active_schedule.producers.at(17).producer_name == name("prodr"));
+      BOOST_TEST(active_schedule.producers.at(18).producer_name == name("prods"));
+      BOOST_TEST(active_schedule.producers.at(19).producer_name == name("prodt"));
+      BOOST_TEST(active_schedule.producers.at(20).producer_name == name("produ"));
 
       // Skip 180 Days so vote gain 100% power
       produce_min_num_of_blocks_to_spend_time_wo_inactive_prod(fc::seconds(180 * 24 * 3600));
@@ -465,14 +468,14 @@ BOOST_FIXTURE_TEST_CASE( rem_vote_reassertion_test, voting_tester ) {
       // Day 0
       // We just claimed rewards so unpaid blocks == 0
       {
-         const auto prod = get_producer_info( "proda" );
+         const auto prod = get_producer_info( name("proda") );
          BOOST_TEST( 0 == prod["unpaid_blocks"].as_int64() );
       }
 
       // Day 3
       {
          produce_min_num_of_blocks_to_spend_time_wo_inactive_prod(fc::seconds(3 * 24 * 3600)); // +3 days
-         const auto prod = get_producer_info( "proda" );
+         const auto prod = get_producer_info( name("proda") );
          BOOST_TEST( 0 <= prod["unpaid_blocks"].as_int64() );
       }
 
@@ -480,7 +483,7 @@ BOOST_FIXTURE_TEST_CASE( rem_vote_reassertion_test, voting_tester ) {
       // Vote was not re-asserted for 7 days so we will not get paid anymore
       {
          produce_min_num_of_blocks_to_spend_time_wo_inactive_prod(fc::seconds(4 * 24 * 3600)); // +4 days
-         const auto prod = get_producer_info( "proda" );
+         const auto prod = get_producer_info( name("proda") );
          BOOST_TEST( 0 <= prod["unpaid_blocks"].as_int64() );
 
          claim_rewards(N(proda));
@@ -490,7 +493,7 @@ BOOST_FIXTURE_TEST_CASE( rem_vote_reassertion_test, voting_tester ) {
       // We claimed rewards and vote was not re-asserted, so unpaid_blocks == 0
       {
          produce_min_num_of_blocks_to_spend_time_wo_inactive_prod(fc::seconds(3 * 24 * 3600)); // +3 days
-         const auto prod = get_producer_info( "proda" );
+         const auto prod = get_producer_info( name("proda") );
          BOOST_TEST( 0 == prod["unpaid_blocks"].as_int64() );
       }
 
@@ -501,7 +504,7 @@ BOOST_FIXTURE_TEST_CASE( rem_vote_reassertion_test, voting_tester ) {
          produce_blocks_for_n_rounds(2);
 
          produce_min_num_of_blocks_to_spend_time_wo_inactive_prod(fc::seconds(1 * 24 * 3600)); // +1 days
-         const auto prod = get_producer_info( "proda" );
+         const auto prod = get_producer_info( name("proda") );
          BOOST_TEST( 0 <= prod["unpaid_blocks"].as_int64() );
       }
    }
@@ -528,10 +531,10 @@ BOOST_FIXTURE_TEST_CASE( rem_vote_weight_test, voting_tester ) {
 
       // Day 0
       {
-         const auto voter = get_voter_info( "whale1" );
+         const auto voter = get_voter_info( name("whale1") );
          BOOST_TEST_REQUIRE( 0.0 == voter["last_vote_weight"].as_double() );
 
-         const auto prod = get_producer_info( "proda" );
+         const auto prod = get_producer_info( name("proda") );
          BOOST_TEST_REQUIRE( 0.0 == prod["total_votes"].as_double() );
       }
 
@@ -545,7 +548,7 @@ BOOST_FIXTURE_TEST_CASE( rem_vote_weight_test, voting_tester ) {
          // weeks to mature: 24;
          // rem weight:      0.04;
          // staked:          399999999000;
-         const auto prod = get_producer_info( "proda" );
+         const auto prod = get_producer_info( name("proda") );
          BOOST_TEST_REQUIRE( 17461719597502810 == prod["total_votes"].as_double() );
       }
 
@@ -558,7 +561,7 @@ BOOST_FIXTURE_TEST_CASE( rem_vote_weight_test, voting_tester ) {
          // weeks to mature: 20;
          // rem weight:      0.2;
          // staked:          399999999000
-         const auto prod = get_producer_info( "proda" );
+         const auto prod = get_producer_info( name("proda") );
          BOOST_TEST_REQUIRE( 92090147342403456 == prod["total_votes"].as_double() );
       }
 
@@ -572,7 +575,7 @@ BOOST_FIXTURE_TEST_CASE( rem_vote_weight_test, voting_tester ) {
          // weeks to mature: 20;
          // rem weight:      0.2;
          // staked:          399999999000
-         const auto prod = get_producer_info( "proda" );
+         const auto prod = get_producer_info( name("proda") );
          BOOST_TEST_REQUIRE( 92090147342403456 == prod["total_votes"].as_double() );
       }
 
@@ -585,14 +588,14 @@ BOOST_FIXTURE_TEST_CASE( rem_vote_weight_test, voting_tester ) {
          // weeks to mature: 0;
          // rem weight:      1.000000;
          // staked:          399999999000
-         const auto prod = get_producer_info( "proda" );
+         const auto prod = get_producer_info( name("proda") );
          BOOST_TEST_REQUIRE( 6.1736501692861286e+17 == prod["total_votes"].as_double() );
       }
 
       // Day 180 (0)
       // re-staking vote power 100%
-      // staked 40KK 
-      // re-staked 20KK 
+      // staked 40KK
+      // re-staked 20KK
       {
          const auto r = delegate_bandwidth(N(rem.stake), N(whale1), asset(20'000'000'0000LL));
          BOOST_REQUIRE( !r->except_ptr );
@@ -604,17 +607,17 @@ BOOST_FIXTURE_TEST_CASE( rem_vote_weight_test, voting_tester ) {
          // eos weight:      1.543412546180063e+06;
          // rem weight:      0.72;
          // staked:          599999999000
-         const auto prod = get_producer_info( "proda" );
+         const auto prod = get_producer_info( name("proda") );
          BOOST_TEST_REQUIRE( 6.667542188385303e+17 == prod["total_votes"].as_double() );
       }
 
       // Day 210 (30)
       // re-staking vote power 83%
       // staked 60KK
-      // re-staked 20KK 
+      // re-staked 20KK
       {
          produce_min_num_of_blocks_to_spend_time_wo_inactive_prod(fc::seconds(30 * 24 * 3600)); // +30 days
-         
+
          const auto r = delegate_bandwidth(N(rem.stake), N(whale1), asset(20'000'000'0000LL));
          BOOST_REQUIRE( !r->except_ptr );
 
@@ -625,7 +628,7 @@ BOOST_FIXTURE_TEST_CASE( rem_vote_weight_test, voting_tester ) {
          // eos weight:      1.627939195726894e+06;
          // rem weight:      0.678;
          // staked:          799999999000
-         const auto prod = get_producer_info( "proda" );
+         const auto prod = get_producer_info( name("proda") );
          BOOST_TEST_REQUIRE( 8.8559892136843136e+17 == prod["total_votes"].as_double() );
       }
 
@@ -638,188 +641,188 @@ BOOST_FIXTURE_TEST_CASE( rem_vote_weight_test, voting_tester ) {
          // eos weight:      1.811133596417372e+06;
          // rem weight:      1.000000;
          // staked:          799999999000
-         const auto prod = get_producer_info( "proda" );
+         const auto prod = get_producer_info( name("proda") );
          BOOST_TEST_REQUIRE( 1.4489068753227643e+18 == prod["total_votes"].as_double() );
 
       }
    } FC_LOG_AND_RETHROW()
 }
 
-BOOST_FIXTURE_TEST_CASE( undelegate_after_resignation_test, voting_tester ) {
-   try {
-      const auto producers = { N(b1), N(whale1), N(whale2), N(whale3) };
-      for( const auto& producer : producers ) {
-         register_producer(producer);
-         votepro( producer, { N(b1) } );
-      }
-
-      transfer( name(config::system_account_name), name(N(proda)), core_from_string("10000.0000") );
-      delegate_bandwidth( N(proda), N(runnerup1), core_from_string("1000.0000"), 0 );
-
-      register_producer( N(proda) );
-
-      BOOST_REQUIRE_THROW( undelegate_bandwidth( N(proda), N(proda), core_from_string("1.0000") ), eosio_assert_message_exception );
-      BOOST_REQUIRE( undelegate_bandwidth( N(proda), N(runnerup1), core_from_string("500.0000") ) );
-      BOOST_REQUIRE( delegate_bandwidth( N(proda), N(runnerup1), core_from_string("500.0000"), 0 ) );
-
-      produce_min_num_of_blocks_to_spend_time_wo_inactive_prod( fc::seconds(180 * 24 * 3600) );
-      unregister_producer( N(proda) );
-
-      BOOST_REQUIRE_THROW( undelegate_bandwidth( N(proda), N(proda), core_from_string("1.0000") ), eosio_assert_message_exception );
-      BOOST_REQUIRE( undelegate_bandwidth( N(proda), N(runnerup1), core_from_string("1000.0000") ) );
-   } FC_LOG_AND_RETHROW()
-}
-
-BOOST_FIXTURE_TEST_CASE( resignation_test, voting_tester ) {
-   try {
-
-      const auto producers = { N(b1), N(proda), N(whale1), N(whale2), N(whale3) };
-      for( const auto& producer : producers ) {
-         register_producer(producer);
-      }
-
-      for( const auto& producer : producers ) {
-         votepro( producer, { N(proda) } );
-      }
-
-      // Day 0
-      {
-         // Should throw because producer stake is locked for 180 days
-         BOOST_REQUIRE_THROW( unregister_producer( N(proda) ), eosio_assert_message_exception );
-      }
-
-      // Day 180 so stake is unlocked
-      {
-         produce_min_num_of_blocks_to_spend_time_wo_inactive_prod(fc::seconds(180 * 24 * 3600)); // +180 days
-
-         const auto prod = get_producer_info( "proda" );
-         BOOST_TEST( 0 < prod["unpaid_blocks"].as_int64() );
-
-         claim_rewards( N(proda) );
-         // Claim rewards is called from `unregprod` and allowed only once per day
-         BOOST_REQUIRE_THROW( unregister_producer( N(proda) ), eosio_assert_message_exception );
-      }
-
-      // Day 181
-      {
-         // Re-assert vote so we will participate in block rewards
-         votepro( N(proda), { N(proda) } );
-         torewards(config::system_account_name, config::system_account_name, core_from_string("20000.0000"));
-
-         BOOST_TEST( 0 == get_producer_info( "proda" )["unpaid_blocks"].as_int64() );
-         produce_min_num_of_blocks_to_spend_time_wo_inactive_prod(fc::seconds(1 * 24 * 3600)); // +1 day
-         BOOST_TEST( 0 < get_producer_info( "proda" )["unpaid_blocks"].as_int64() );
-
-         const auto balance_before_unreg = get_balance(N(proda)).get_amount();
-         BOOST_TEST( 0 == balance_before_unreg );
-
-         unregister_producer( N(proda) );
-         BOOST_TEST( balance_before_unreg < get_balance(N(proda)).get_amount() );
-
-         BOOST_TEST( 0 == get_producer_info( "proda" )["unpaid_blocks"].as_int64() );
-      }
-   } FC_LOG_AND_RETHROW()
-}
-
 BOOST_FIXTURE_TEST_CASE( stake_lock_period_test, voting_tester ) {
    try {
-
-      const auto producers = { N(b1), N(proda), N(whale1), N(whale2), N(whale3) };
-      for( const auto& producer : producers ) {
-         register_producer(producer);
-      }
-
-      //Stake lock time before change of stake_lock_period should be over 180 days after registration
-      const auto initial_time = fc::microseconds(1577836818500000);
-      const auto initial_lock_period = fc::days(180);
-
-      auto voter = get_voter_info( "proda" );
-
-      BOOST_CHECK( initial_time + initial_lock_period == microseconds_since_epoch_of_iso_string(voter["stake_lock_time"]));
-
-      for( const auto& producer : producers ) {
-         votepro( producer, { N(proda) } );
-      }
-
-      // Should throw because producer stake is locked for 180 days
-      BOOST_REQUIRE_THROW( unregister_producer( N(proda) ), eosio_assert_message_exception );
-      voter = get_voter_info( "proda" );
-
-      const auto first_test_amount = asset(2'000'000'000);
-      delegate_bandwidth(N(rem.stake), N(proda), first_test_amount );
-
-      set_lock_period(90);
-
+      // Initial stake delegating
+      // GMT: Wednesday, January 1, 2020
+      const auto initial_time = fc::microseconds(1577836806000000);
       {
+         // Initital stake lock is due to
+         // GMT: Monday, June 29, 2020
+         const auto expected_lock_period = initial_time + fc::days(180);
 
-         auto new_stake_lock_time_microseconds = fc::microseconds(1593388819785000);
-
-         voter = get_voter_info("proda");
-
-         BOOST_CHECK(new_stake_lock_time_microseconds == microseconds_since_epoch_of_iso_string(voter["stake_lock_time"]));
+         auto voter = get_voter_info( name("proda") );
+         BOOST_CHECK( expected_lock_period == microseconds_since_epoch_of_iso_string( voter["stake_lock_time"] ) );
       }
 
-      produce_min_num_of_blocks_to_spend_time_wo_inactive_prod(fc::seconds(90 * 24 * 3600));
+      // Re-delegating after 90 Days
+      // GMT: Tuesday, March 31, 2020
+      {
+         produce_min_num_of_blocks_to_spend_time_wo_inactive_prod( fc::days(90) );
+         delegate_bandwidth( N(rem.stake), N(proda), asset( 1'000'000'0000LL ) );
 
-      const auto second_test_amount = asset(1'000'000'000);
-      delegate_bandwidth(N(rem.stake), N(proda), second_test_amount);
+         // Staked:      500'000'0000
+         // Re-staked: 1'000'000'0000
+         // Total:     1'500'000'0000
 
-       {
+         // Days to mature: 90
+         // New period: 1/3 * 90 + 2/3 * 180 = 150
+         // GMT: Saturday, August 29, 2020
+         const auto expected_lock_period = fc::microseconds( 1598577990345000 );
 
-          auto new_stake_lock_time_microseconds = fc::microseconds(1593389790812000);
+         const auto voter = get_voter_info( name("proda") );
+         BOOST_CHECK( expected_lock_period == microseconds_since_epoch_of_iso_string( voter["stake_lock_time"] ) );
+      }
 
-          voter = get_voter_info("proda");
 
-          BOOST_CHECK(new_stake_lock_time_microseconds == microseconds_since_epoch_of_iso_string(voter["stake_lock_time"]));
-       }
+      // Re-delegating after 90 Days
+      // New lock period is 90 Days
+      // GMT: Monday, June 29, 2020
+      {
+         set_lock_period( 90 );
+         produce_min_num_of_blocks_to_spend_time_wo_inactive_prod( fc::days(90) );
+         delegate_bandwidth( N(rem.stake), N(proda), asset( 1'000'000'0000LL ) );
 
-       produce_min_num_of_blocks_to_spend_time_wo_inactive_prod(fc::seconds(90 * 24 * 3600));
+         // Staked:    1'500'000'0000
+         // Re-staked: 1'000'000'0000
+         // Total:     2'500'000'0000
 
-       BOOST_REQUIRE(unregister_producer( N(proda) ));
+         // Days to mature: 60
+         // New period: 3/5 * 60 + 2/5 * 90 = 72
+         // GMT: Wednesday, September 9, 2020
+         const auto expected_lock_period = fc::microseconds(1599618933049000);
 
-       voter = get_voter_info( "proda" );
-       const auto time_after_six_month = fc::microseconds(1593404352500000);
+         const auto voter = get_voter_info( name("proda") );
+         BOOST_CHECK( expected_lock_period == microseconds_since_epoch_of_iso_string( voter["stake_lock_time"] ) );
+      }
 
-       BOOST_CHECK(time_after_six_month + initial_lock_period == microseconds_since_epoch_of_iso_string(voter["stake_lock_time"]));
 
-   } FC_LOG_AND_RETHROW()
+      // 72 Days later
+      // GMT: Wednesday, September 9, 2020
+      // Producer should be allowed to unregister, so stake is locked for another 6 months
+      {
+         // TODO should be removed when stake unlock logic is applied to lock instead of producer status
+         {
+            const auto producers = { N(b1), N(proda), N(whale1), N(whale2), N(whale3) };
+            for( const auto& producer : producers ) {
+               register_producer( producer );
+               votepro( producer, { producer } );
+            }
+         }
+
+         produce_min_num_of_blocks_to_spend_time_wo_inactive_prod( fc::days( 72 ) );
+         BOOST_REQUIRE( unregister_producer( N(proda) ) );
+
+         // GMT: Tuesday, March 9, 2021
+         const auto expected_lock_period = fc::microseconds( 1599618933049000 );
+
+         const auto voter = get_voter_info( name("proda") );
+         BOOST_CHECK( expected_lock_period == microseconds_since_epoch_of_iso_string( voter["stake_lock_time"] ) );
+      }
+   }
+   FC_LOG_AND_RETHROW()
 }
 
-BOOST_FIXTURE_TEST_CASE( regprod_during_unlock_period_test, voting_tester ) {
+BOOST_FIXTURE_TEST_CASE( undelegate_locked_stake_test, voting_tester ) {
    try {
-
-      auto voter = get_voter_info( "proda" );
-      const auto producers = { N(b1), N(proda), N(whale1), N(whale2), N(whale3) };
+      // we need this to activate 15% of tokens
+      const auto producers = { N(b1), N(whale1), N(whale2), N(whale3), N(proda) };
       for( const auto& producer : producers ) {
          register_producer(producer);
-      }
-      for( const auto& producer : producers ) {
-         votepro( producer, { N(proda) } );
+         votepro( producer, { producer } );
       }
 
-       //Check if stake_locke_time have initial date after producer registration
-       BOOST_CHECK( fc::microseconds(0) != microseconds_since_epoch_of_iso_string(voter["stake_lock_time"]));
+      // Initial stake delegating
+      // GMT: Wednesday, January 1, 2020
+      const auto initial_time         = fc::microseconds(1577836806000000);
+      const auto initial_locked_stake = 499'999'9000LL;
+      {
+         // Initital stake lock is due to
+         // GMT: Monday, June 29, 2020
+         const auto expected_lock_period = initial_time + fc::days(180);
 
-       //Skip 180 days to call unregistration
-       produce_min_num_of_blocks_to_spend_time_wo_inactive_prod(fc::seconds(180 * 24 * 3600)); // +180 days
+         auto voter = get_voter_info( name("proda") );
+         BOOST_CHECK( expected_lock_period == microseconds_since_epoch_of_iso_string( voter["stake_lock_time"] ) );
+         BOOST_TEST( initial_locked_stake == voter["locked_stake"].as_int64() );
+      }
 
-       //Making producer inactive
-       unregister_producer( N(proda) );
+      // We are not allowed to undelegate during stake lock period
+      {
+         BOOST_REQUIRE_EXCEPTION( undelegate_bandwidth( N(proda), N(proda), core_from_string("1.0000") ), eosio_assert_message_exception, fc_exception_message_is("assertion failure with message: cannot undelegate during stake lock period") );
+      }
 
-       //Try to reg same producer again, if stake >= 250'000.0000, stake_lock_period should be 0
-       register_producer(N(proda));
 
-       voter = get_voter_info( "proda" );
+      // +180 Days
+      // GMT: Monday, June 29, 2020
+      {
+         produce_min_num_of_blocks_to_spend_time_wo_inactive_prod( fc::days(180) );
 
-       //Time point after 180 days that should be
-       const auto current_time = fc::microseconds(1593404351500000);
+         // 499'999'9000 * 1 / 180 = 2'777'7772
+         const auto one_day_undelegate_limit = 2'777'7772LL;
 
-       //Check if stake_lock_period is 0 after registration
-       BOOST_CHECK( current_time == microseconds_since_epoch_of_iso_string(voter["stake_lock_time"]));
+         BOOST_REQUIRE_EXCEPTION( undelegate_bandwidth( N(proda), N(proda), asset{ one_day_undelegate_limit + 1 } ), eosio_assert_message_exception, fc_exception_message_starts_with("assertion failure with message: insufficient unlocked amount") );
+         undelegate_bandwidth( N(proda), N(proda), asset{ one_day_undelegate_limit } );
 
-       // Stake proda = 500'000'0000 - 1000 = 4999999000
-       BOOST_CHECK(voter["locked_stake"].as<int64_t>() == 4999999000 );
+         auto voter = get_voter_info( name("proda") );
+         BOOST_TEST( (initial_locked_stake-one_day_undelegate_limit) == voter["locked_stake"].as_int64() );
+      }
 
+      // +10 Days
+      {
+         produce_min_num_of_blocks_to_spend_time_wo_inactive_prod( fc::days(10) );
+
+         // 497'222'1228 * 1 / 180 = 27623451
+         const auto remaining_locked_stake = 497'222'1228;
+         const auto one_day_undelegate_limit = 2'762'3451LL;
+         undelegate_bandwidth( N(proda), N(proda), asset{ 10 * one_day_undelegate_limit } );
+
+         auto voter = get_voter_info( name("proda") );
+         BOOST_TEST( (remaining_locked_stake - 10 * one_day_undelegate_limit) == voter["locked_stake"].as_int64() );
+      }
+
+      // +180 Days
+      {
+         produce_min_num_of_blocks_to_spend_time_wo_inactive_prod( fc::days(180) );
+
+         const auto minimal_account_stake = 100'0000; // minimum stake for account 100.0000 REM
+         const auto remaining_locked_stake = 469'598'6718 - 100'0000;
+
+         // cannot undelegate more than locked
+         BOOST_REQUIRE_EXCEPTION( undelegate_bandwidth( N(proda), N(proda), asset{ remaining_locked_stake + minimal_account_stake + 1 } ), eosio_assert_message_exception, fc_exception_message_is("assertion failure with message: insufficient locked amount") );
+
+         undelegate_bandwidth( N(proda), N(proda), asset{ remaining_locked_stake } );
+
+         auto voter = get_voter_info( name("proda") );
+         BOOST_TEST( minimal_account_stake == voter["locked_stake"].as_int64() );
+      }
+
+      // +3 Days
+      {
+         produce_min_num_of_blocks_to_spend_time_wo_inactive_prod( fc::days(3) );
+
+         const auto staked_before_refund = get_voter_info( name("proda") )["staked"];
+         const auto locked_before_refund = get_voter_info( name("proda") )["locked_stake"];
+         const auto lock_time_refund = microseconds_since_epoch_of_iso_string( get_voter_info( name("proda") )["stake_lock_time"] );
+
+         refund_to_stake( N(proda) );
+         produce_blocks(2);
+         BOOST_TEST( staked_before_refund < get_voter_info( name("proda") )["staked"].as_int64() );
+         BOOST_TEST( initial_locked_stake == get_voter_info( name("proda") )["staked"].as_int64() );
+         BOOST_TEST( locked_before_refund < get_voter_info( name("proda") )["locked_stake"].as_int64() );
+         BOOST_TEST( initial_locked_stake == get_voter_info( name("proda") )["locked_stake"].as_int64() );
+         BOOST_CHECK( lock_time_refund == microseconds_since_epoch_of_iso_string( get_voter_info( name("proda") )["stake_lock_time"] ) );
+      }
+
+      {
+         undelegate_bandwidth( N(proda), N(proda), asset{ initial_locked_stake - 100'0000LL } );
+      }
    } FC_LOG_AND_RETHROW()
 }
 
