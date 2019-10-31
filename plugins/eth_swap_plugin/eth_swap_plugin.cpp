@@ -192,7 +192,7 @@ class eth_swap_plugin_impl {
             controller& cc = app().get_plugin<chain_plugin>().chain();
             auto chainid = app().get_plugin<chain_plugin>().get_chain_id();
 
-            if( data.chain_id != chain_id ) {
+            if( data.chain_id != std::string(chainid) ) {
                 elog("Invalid chain identifier ${c}", ("c", data.chain_id));
                 return;
             }
@@ -257,7 +257,6 @@ void eth_swap_plugin::set_program_options(options_description&, options_descript
          ("eth_swap_contract_address", bpo::value<std::string>()->default_value(eth_swap_contract_address), "")
          ("eth_swap_request_event", bpo::value<std::string>()->default_value(eth_swap_request_event), "")
          ("return_chain_id", bpo::value<std::string>()->default_value(return_chain_id), "")
-         ("chain_id", bpo::value<std::string>()->default_value(chain_id), "")
 
          ("eth_events_window_length", bpo::value<uint32_t>()->default_value(eth_events_window_length), "")
          ("blocks_per_filter", bpo::value<uint32_t>()->default_value(blocks_per_filter), "")
@@ -295,7 +294,6 @@ void eth_swap_plugin::plugin_initialize(const variables_map& options) {
       eth_swap_contract_address = options.at( "eth_swap_contract_address" ).as<std::string>();
       eth_swap_request_event    = options.at( "eth_swap_request_event" ).as<std::string>();
       return_chain_id           = options.at( "return_chain_id" ).as<std::string>();
-      chain_id                  = options.at( "chain_id" ).as<std::string>();
 
       eth_events_window_length = options.at( "eth_events_window_length" ).as<uint32_t>();
       blocks_per_filter = options.at( "blocks_per_filter" ).as<uint32_t>();
