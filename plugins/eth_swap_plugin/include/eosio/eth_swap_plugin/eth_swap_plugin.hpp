@@ -73,7 +73,7 @@ constexpr int64_t block_timestamp_epoch = 946684800000ll;  // epoch is year 2000
 typedef eosio::chain::block_timestamp<block_interval_ms, block_timestamp_epoch> epoch_block_timestamp;
 
 std::string rem_token_id              = "REM";
-std::string eth_swap_contract_address = "0x9fB8A18fF402680b47387AE0F4e38229EC64f098";
+std::string eth_swap_contract_address = "0x39882ab5105b1d627e6aed3ff39c1b004a18e207";
 std::string eth_swap_request_event    = "0x0e918020302bf93eb479360905c1535ba1dbc8aeb6d20eff433206bf4c514e13";  // request swap event id in ethereum swap contract
 std::string return_chain_id           = "ethropsten";  // return chain identifier if case of swap cancellation
 
