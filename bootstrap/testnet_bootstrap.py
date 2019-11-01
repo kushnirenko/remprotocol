@@ -13,7 +13,7 @@ MINIMUM_PRODUCER_STAKE = 200_0000
 tech_accounts = [
     #(account_name, public_key, stake, liquid)
     ('rewards', 'EOS8Znrtgwt8TfpmbVpTKvA2oB8Nqey625CLN8bCN3TEbgx86Dsvr', 1000_0000, 100_000_000_0000),
-    ('faucetbot', 'EOS8Znrtgwt8TfpmbVpTKvA2oB8Nqey625CLN8bCN3TEbgx86Dsvr', 1_000_0000, 10_000_000_0000),
+    ('remfaucetbot', 'EOS8Znrtgwt8TfpmbVpTKvA2oB8Nqey625CLN8bCN3TEbgx86Dsvr', 1_000_0000, 10_000_000_0000),
 ]
 
 producers = {
