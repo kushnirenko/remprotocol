@@ -1,7 +1,10 @@
-#from datetime import datetime, timezone
+import hashlib
+import json
+from datetime import datetime, timezone
 
-from mainnet_bootstrap import remcli, run, intToRemCurrency
-#from eosiopy import sign
+import requests
+
+from mainnet_bootstrap import remcli, run, intToRemCurrency, get_chain_id, wallet_port
 
 producers_quantity = 21
 
@@ -9,6 +12,8 @@ producers_supply = 500_000_000_0000
 swapbot_stake = 1_000_0000
 
 MINIMUM_PRODUCER_STAKE = 200_0000
+
+sign_digest_url = f'http://127.0.0.1:{wallet_port}/v1/wallet/sign_digest'
 
 tech_accounts = [
     #(account_name, public_key, stake, liquid)
@@ -119,35 +124,42 @@ def create_tech_accounts():
         --stake "{intToRemCurrency(stake)}" --transfer -p rem@active')
 
 
-# def init_supply_to_rem_acc():
-#     timestamp = datetime.today().strftime("%Y-%m-%dT%H:%M:%S")
-#     epoch = datetime.utcfromtimestamp(0)
-#     block_datetime_utc = datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%S').replace(tzinfo=timezone.utc).timestamp()
-#     epoch_datetime_utc = datetime.utcfromtimestamp(0).replace(tzinfo=timezone.utc).timestamp()
-#     seconds_since_epoch = str(int(block_datetime_utc - epoch_datetime_utc))
-#
-#     txid = '0x0000000000000000000000000000000000000000000000000000000000000000'
-#     return_address = '0x0000000000000000000000000000000000000000'
-#     chain_id = '93ece941df27a5787a405383a66a7c26d04e80182adf504365710331ac0625a7'
-#     return_chainid = 'eth'
-#     rampayer = 'rem'
-#     receiver = 'rem'
-#
-#     digest_to_sign = f'{receiver}*{txid}*{chain_id}*{intToRemCurrency(initial_supply)}*\
-# {return_address}*{return_chainid}*{seconds_since_epoch}'.encode()
-#
-#     sig = sign(swap_privkey, digest_to_sign)
-#
-#     run(remcli + f' push action rem.swap init \'["{rampayer}",\
-#     "{txid}", "{swap_pubkey}",\
-#     "{intToRemCurrency(initial_supply)}", "{return_address}", "{return_chainid}", "{timestamp}"]\'\
-#     -p rem@active')
-#
-#     run(remcli + f' push action rem.swap finish \'["{rampayer}", "{receiver}",\
-#     "{txid}",\
-#     "{swap_pubkey}", "{intToRemCurrency(initial_supply)}", "{return_address}", "{return_chainid}",\
-#     "{timestamp}", "{sig}"]\'\
-#     -p rem@active')
+def init_supply_to_rem_acc():
+    timestamp = datetime.today().strftime("%Y-%m-%dT%H:%M:%S")
+    epoch = datetime.utcfromtimestamp(0)
+    block_datetime_utc = datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%S').replace(tzinfo=timezone.utc).timestamp()
+    epoch_datetime_utc = datetime.utcfromtimestamp(0).replace(tzinfo=timezone.utc).timestamp()
+    seconds_since_epoch = str(int(block_datetime_utc - epoch_datetime_utc))
+
+    txid = '0x0000000000000000000000000000000000000000000000000000000000000000'
+    return_address = '0x0000000000000000000000000000000000000000'
+    chain_id = get_chain_id()
+    return_chainid = 'eth'
+    rampayer = 'rem'
+    receiver = 'rem'
+
+    digest_to_sign = f'{receiver}*{txid}*{chain_id}*{intToRemCurrency(initial_supply)}*\
+{return_address}*{return_chainid}*{seconds_since_epoch}'.encode()
+
+    headers = {
+        'accept': "application/json",
+        'content-type': "application/json"
+    }
+    response = requests.post(sign_digest_url, headers=headers,
+                             data=json.dumps([hashlib.sha256(digest_to_sign).hexdigest(), swap_pubkey]))
+
+    sig = response.json()
+
+    run(remcli + f' push action rem.swap init \'["{rampayer}",\
+    "{txid}", "{swap_pubkey}",\
+    "{intToRemCurrency(initial_supply)}", "{return_address}", "{return_chainid}", "{timestamp}"]\'\
+    -p rem@active')
+
+    run(remcli + f' push action rem.swap finish \'["{rampayer}", "{receiver}",\
+    "{txid}",\
+    "{swap_pubkey}", "{intToRemCurrency(initial_supply)}", "{return_address}", "{return_chainid}",\
+    "{timestamp}", "{sig}"]\'\
+    -p rem@active')
 
 
 def issue_supply_to_rem_acc():
@@ -193,7 +205,7 @@ def vote_producers():
 
 
 if __name__ == '__main__':
-    issue_supply_to_rem_acc()
+    init_supply_to_rem_acc()
     create_tech_accounts()
     create_producer_accounts()
     import_producer_keys()
