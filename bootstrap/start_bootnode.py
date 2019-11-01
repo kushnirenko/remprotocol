@@ -56,11 +56,7 @@ def start_node(nodeIndex, account):
                 '    --oracle-signing-key ' + account['pvt'] +
                 '    --swap-signing-key ' + account['pvt'] +
                 '    --swap-authority ' + account['name'] + '@active'
-                '    --update_price_period 5'
-                #'    --oracle-authority remproducer1@active'
-                #'    --oracle-authority remproducer2@active'
-                #'    --swap-authority remproducer1@active'
-                #'    --swap-authority remproducer2@active'
+                '    --eth_swap_contract_address 0x39882AB5105b1D627E6AED3FF39c1B004a18E207'
         )
     if cryptocompare_apikey:
         swap_and_oracle_opts += (
@@ -79,6 +75,7 @@ def start_node(nodeIndex, account):
         '    --config-dir ' + os.path.abspath(dir) +
         '    --data-dir ' + os.path.abspath(dir) +
         '    --chain-state-db-size-mb 1024'
+        '    --max-transaction-time 200'
         '    --http-server-address 127.0.0.1:' + str(8888 + nodeIndex) +
         '    --p2p-listen-endpoint 127.0.0.1:' + str(9000 + nodeIndex) +
         '    --max-clients ' + str(maxClients) +

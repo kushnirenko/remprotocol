@@ -1,20 +1,20 @@
-from datetime import datetime, timezone
+#from datetime import datetime, timezone
 
-from mainnet_bootstrap import system_accounts, remcli, run, jsonArg, intToRemCurrency
-from eosiopy import sign
+from mainnet_bootstrap import remcli, run, intToRemCurrency
+#from eosiopy import sign
 
 producers_quantity = 21
-rewards_account_supply = 100_000_000_0000
+
 producers_supply = 500_000_000_0000
-swapbot_supply = 1_000_000_0000
-fee = 21*100_0000+100_0000
+swapbot_stake = 1_000_0000
 
-MINIMUM_ACCOUNT_STAKE = 500_0000
-MINIMUM_PRODUCER_STAKE = 250_000_0000
+MINIMUM_PRODUCER_STAKE = 200_0000
 
-tech_accounts = {
-    'rewards': 'EOS8Znrtgwt8TfpmbVpTKvA2oB8Nqey625CLN8bCN3TEbgx86Dsvr',
-}
+tech_accounts = [
+    #(account_name, public_key, stake, liquid)
+    ('rewards', 'EOS8Znrtgwt8TfpmbVpTKvA2oB8Nqey625CLN8bCN3TEbgx86Dsvr', 1000_0000, 100_000_000_0000),
+    ('faucetbot', 'EOS8Znrtgwt8TfpmbVpTKvA2oB8Nqey625CLN8bCN3TEbgx86Dsvr', 1_000_0000, 10_000_000_0000),
+]
 
 producers = {
     "producers": [
@@ -86,7 +86,7 @@ def geometric_progression():
     prod_supply_sum = 0
     prod_supply = producers_supply // 2
     for prod in producers['producers']:
-        prod['funds'] = prod_supply
+        prod['funds'] = max(prod_supply, MINIMUM_PRODUCER_STAKE)
         prod_supply_sum += prod['funds']
         prod_supply = prod_supply // 2
 
@@ -95,7 +95,6 @@ def geometric_progression():
 
 def algebraic_progression():
     prod_stake_delta = 1_000_000_0000  # delta for arithmetic progression
-    global initial_supply
     prod_supply = producers_supply / producers_quantity + prod_stake_delta * (producers_quantity - 1) / 2
     prod_supply_sum = 0
     for prod in producers['producers']:
@@ -106,47 +105,49 @@ def algebraic_progression():
     return prod_supply_sum
 
 
-initial_supply = rewards_account_supply + geometric_progression() + swapbot_supply + fee
+initial_supply = geometric_progression() + swapbot_stake
+for _, _, s, l in tech_accounts:
+    initial_supply += s + l
 
 swap_pubkey = 'EOS8Znrtgwt8TfpmbVpTKvA2oB8Nqey625CLN8bCN3TEbgx86Dsvr'
 swap_privkey = '5K463ynhZoCDDa4RDcr63cUwWLTnKqmdcoTKTHBjqoKfv4u5V7p'
 
 
 def create_tech_accounts():
-    for account_name, public_key in tech_accounts.items():
+    for account_name, public_key, stake, liquid in tech_accounts:
         run(remcli + f' system newaccount rem {account_name} {public_key} {public_key} \
-        --stake "{intToRemCurrency(MINIMUM_ACCOUNT_STAKE)}" --transfer -p rem@active')
+        --stake "{intToRemCurrency(stake)}" --transfer -p rem@active')
 
 
-def init_supply_to_rem_acc():
-    timestamp = datetime.today().strftime("%Y-%m-%dT%H:%M:%S")
-    epoch = datetime.utcfromtimestamp(0)
-    block_datetime_utc = datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%S').replace(tzinfo=timezone.utc).timestamp()
-    epoch_datetime_utc = datetime.utcfromtimestamp(0).replace(tzinfo=timezone.utc).timestamp()
-    seconds_since_epoch = str(int(block_datetime_utc - epoch_datetime_utc))
-
-    txid = '0x0000000000000000000000000000000000000000000000000000000000000000'
-    return_address = '0x0000000000000000000000000000000000000000'
-    chain_id = '93ece941df27a5787a405383a66a7c26d04e80182adf504365710331ac0625a7'
-    return_chainid = 'eth'
-    rampayer = 'rem'
-    receiver = 'rem'
-
-    digest_to_sign = f'{receiver}*{txid}*{chain_id}*{intToRemCurrency(initial_supply)}*\
-{return_address}*{return_chainid}*{seconds_since_epoch}'.encode()
-
-    sig = sign(swap_privkey, digest_to_sign)
-
-    run(remcli + f' push action rem.swap init \'["{rampayer}",\
-    "{txid}", "{swap_pubkey}",\
-    "{intToRemCurrency(initial_supply)}", "{return_address}", "{return_chainid}", "{timestamp}"]\'\
-    -p rem@active')
-
-    run(remcli + f' push action rem.swap finish \'["{rampayer}", "{receiver}",\
-    "{txid}",\
-    "{swap_pubkey}", "{intToRemCurrency(initial_supply)}", "{return_address}", "{return_chainid}",\
-    "{timestamp}", "{sig}"]\'\
-    -p rem@active')
+# def init_supply_to_rem_acc():
+#     timestamp = datetime.today().strftime("%Y-%m-%dT%H:%M:%S")
+#     epoch = datetime.utcfromtimestamp(0)
+#     block_datetime_utc = datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%S').replace(tzinfo=timezone.utc).timestamp()
+#     epoch_datetime_utc = datetime.utcfromtimestamp(0).replace(tzinfo=timezone.utc).timestamp()
+#     seconds_since_epoch = str(int(block_datetime_utc - epoch_datetime_utc))
+#
+#     txid = '0x0000000000000000000000000000000000000000000000000000000000000000'
+#     return_address = '0x0000000000000000000000000000000000000000'
+#     chain_id = '93ece941df27a5787a405383a66a7c26d04e80182adf504365710331ac0625a7'
+#     return_chainid = 'eth'
+#     rampayer = 'rem'
+#     receiver = 'rem'
+#
+#     digest_to_sign = f'{receiver}*{txid}*{chain_id}*{intToRemCurrency(initial_supply)}*\
+# {return_address}*{return_chainid}*{seconds_since_epoch}'.encode()
+#
+#     sig = sign(swap_privkey, digest_to_sign)
+#
+#     run(remcli + f' push action rem.swap init \'["{rampayer}",\
+#     "{txid}", "{swap_pubkey}",\
+#     "{intToRemCurrency(initial_supply)}", "{return_address}", "{return_chainid}", "{timestamp}"]\'\
+#     -p rem@active')
+#
+#     run(remcli + f' push action rem.swap finish \'["{rampayer}", "{receiver}",\
+#     "{txid}",\
+#     "{swap_pubkey}", "{intToRemCurrency(initial_supply)}", "{return_address}", "{return_chainid}",\
+#     "{timestamp}", "{sig}"]\'\
+#     -p rem@active')
 
 
 def issue_supply_to_rem_acc():
@@ -159,7 +160,7 @@ def issue_supply_to_rem_acc():
 def create_producer_accounts():
     for prod in producers['producers']:
         run(remcli + f' system newaccount rem {prod["name"]} {prod["pub"]} {prod["pub"]} \
-        --stake "{intToRemCurrency(MINIMUM_ACCOUNT_STAKE)}" --transfer -p rem@active')
+        --stake "{intToRemCurrency(prod["funds"])}" --transfer -p rem@active')
 
 
 def import_producer_keys():
@@ -168,23 +169,15 @@ def import_producer_keys():
 
 
 def transfer_tokens_to_accounts():
-    for prod in producers['producers']:
-        run(remcli + f' transfer rem {prod["name"]} "{intToRemCurrency(prod["funds"] - MINIMUM_ACCOUNT_STAKE)}" ""')
+    for account_name, public_key, stake, liquid in tech_accounts:
+        run(remcli + f' transfer rem {account_name} "{intToRemCurrency(liquid)}" ""')
 
-    run(remcli + f' transfer rem swapbot "{intToRemCurrency(swapbot_supply)}" ""')
-    run(remcli + f' transfer rem rewards "{intToRemCurrency(rewards_account_supply)}" ""')
+    run(remcli + f' transfer rem swapbot "{intToRemCurrency(swapbot_stake)}" ""')
 
 
 def stake_tokens():
-    for prod in producers['producers']:
-        run(remcli + f' system delegatebw {prod["name"]} {prod["name"]} \
-        "{intToRemCurrency(prod["funds"] - MINIMUM_ACCOUNT_STAKE)}" -p {prod["name"]}@active')
-
     run(remcli + f' system delegatebw swapbot swapbot \
-    "{intToRemCurrency(swapbot_supply)}" -p swapbot@active')
-
-    run(remcli + f' system delegatebw rewards rewards \
-    "{intToRemCurrency(rewards_account_supply)}" -p rewards@active')
+    "{intToRemCurrency(swapbot_stake)}" -p swapbot@active')
 
 
 def reg_producers():

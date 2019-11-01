@@ -48,8 +48,8 @@ max_auth_token_supply = 1_000_000_000_000_0000
 rem_symbol = 'REM'
 auth_symbol = 'AUTH'
 
-producer_reward_per_swap = 10_0000  # torewards 10.0000 REM per swap
-min_swap_out_amount = 100_0000
+producer_reward_per_swap = 1000_0000  # torewards 1000.0000 REM per swap
+min_swap_out_amount = 1000_0000
 
 swap_chains = [
     # (chain_id, input, output)
@@ -101,7 +101,7 @@ def create_system_accounts():
 
 
 def create_tech_accounts():
-    for account_name, public_key in tech_accounts.items():
+    for account_name, pk in tech_accounts.items():
         run(remcli + 'create account rem ' + account_name + ' ' + public_key)
 
 
@@ -195,6 +195,7 @@ def set_system_contract():
         remcli + 'push action rem activate \'["1a99a59d87e06e09ec5b028a9cbb7749b4a5ad8819004365d02dc4379a8b7241"]\' -p rem')
     run(
         remcli + 'push action rem activate \'["4e7bf348da00a945489b2a681749eb56f5de00b900014e137ddae39f48f69d67"]\' -p rem')
+    sleep(1)
     run(remcli + 'set contract rem ' + contracts_dir + '/rem.bios/ -p rem')
     retry(remcli + 'set contract rem ' + contracts_dir + '/rem.system/')
     sleep(1)
