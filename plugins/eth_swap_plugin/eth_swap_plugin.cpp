@@ -314,6 +314,30 @@ void eth_swap_plugin::plugin_initialize(const variables_map& options) {
 
 void eth_swap_plugin::plugin_startup() {
   ilog("Ethropsten swap plugin started");
+  // struct get_table_rows_params {
+  //    bool        json = false;
+  //    name        code;
+  //    string      scope;
+  //    name        table;
+  //    string      table_key;
+  //    string      lower_bound;
+  //    string      upper_bound;
+  //    uint32_t    limit = 10;
+  //    string      key_type;  // type of key specified by index_position
+  //    string      index_position; // 1 - primary (first), 2 - secondary index (in order defined by multi_index), 3 - third index, etc
+  //    string      encode_type{"dec"}; //dec, hex , default=dec
+  //    optional<bool>  reverse;
+  //    optional<bool>  show_payer; // show RAM pyer
+  //  };
+  //
+  // struct get_table_rows_result {
+  //    vector<fc::variant> rows; ///< one row per item, either encoded as hex String or JSON object
+  //    bool                more = false; ///< true if last element in data is not the end and sizeof data() < limit
+  //    string              next_key; ///< fill lower_bound with this value to fetch more rows
+  // };
+  //
+  // get_table_rows_result get_table_rows( const get_table_rows_params& params )const;
+
   try {
     my_web3 my_w3(my->_eth_wss_provider);
     ilog("last eth block: " + to_string(my_w3.get_last_block_num()));
@@ -321,6 +345,22 @@ void eth_swap_plugin::plugin_startup() {
 
   std::thread t2([=](){
       sleep(start_monitor_delay);
+      uint32_t i = 0;
+      try {
+        chain_apis::read_only::get_table_rows_params params = {};
+        params.json = true;
+        params.code = N(rem.swap);
+        params.scope = std::string("rem.swap");
+        params.table = N(swapparams);
+
+        chain_apis::read_only::get_table_rows_result result = app().get_plugin<chain_plugin>().get_read_only_api().get_table_rows(params);
+        for( const auto& item : result.rows ) {
+          try {ilog("in_swap_fee: ${i}", ("i", item["in_swap_fee"]));} FC_LOG_AND_DROP()
+          try {ilog("out_swap_min_amount: ${i}", ("i", item["out_swap_min_amount"]));} FC_LOG_AND_DROP()
+          try {ilog("chain_id: ${i}", ("i", item["chain_id"]));} FC_LOG_AND_DROP()
+          ilog("counter: ${i}", ("i", i++));
+        }
+      } FC_LOG_AND_DROP()
       try {
         my->start_monitor();
       } FC_LOG_AND_RETHROW()
