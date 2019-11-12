@@ -13,9 +13,13 @@ import re
 
 ###############################################################
 # nodeos_voting_test
-# --dump-error-details <Upon error print etc/eosio/node_*/config.ini and var/lib/node_*/stderr.log to stdout>
-# --keep-logs <Don't delete var/lib/node_* folders upon test completion>
+#
+# This test sets up multiple producing nodes, each with multiple producers per node. Different combinations of producers
+# are voted into the production schedule and the block production is analyzed to determine if the correct producers are
+# producing blocks and in the right number and order.
+#
 ###############################################################
+
 class ProducerToNode:
     map={}
 
@@ -161,7 +165,7 @@ killEosInstances=not dontKill
 killWallet=not dontKill
 
 WalletdName=Utils.EosWalletName
-ClientName="cleos"
+ClientName="remcli"
 
 try:
     TestHelper.printSystemInfo("BEGIN")
@@ -211,11 +215,12 @@ try:
     # create accounts via eosio as otherwise a bid is needed
     for account in accounts:
         Print("Create new account %s via %s" % (account.name, cluster.eosioAccount.name))
-        trans=node.createInitializeAccount(account, cluster.eosioAccount, stakedDeposit=0, waitForTransBlock=False, stakeNet=1000, stakeCPU=1000, buyRAM=1000, exitOnError=True)
-        transferAmount="100000000.0000 {0}".format(CORE_SYMBOL)
+        trans=node.createInitializeAccount(account, cluster.eosioAccount, stakedDeposit=0, waitForTransBlock=False, stakeQuantity=40000000, exitOnError=True)
+        transferAmount="60000000.0000 {0}".format(CORE_SYMBOL)
         Print("Transfer funds %s from account %s to %s" % (transferAmount, cluster.eosioAccount.name, account.name))
         node.transferFunds(cluster.eosioAccount, account, transferAmount, "test transfer")
-        trans=node.delegatebw(account, 20000000.0000, 20000000.0000, waitForTransBlock=True, exitOnError=True)
+        # trans=node.delegatebw(account, 40000000.0000, waitForTransBlock=True, exitOnError=True)
+        trans=node.regproducer(account, "http::/mysite.com", 0, waitForTransBlock=False, exitOnError=True)
 
     # containers for tracking producers
     prodsActive={}

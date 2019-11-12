@@ -1,7 +1,3 @@
-/**
- *  @file
- *  @copyright defined in eos/LICENSE
- */
 #include <appbase/application.hpp>
 
 #include <eosio/wallet_plugin/yubihsm_wallet.hpp>
@@ -14,8 +10,6 @@
 #include <boost/range/algorithm/copy.hpp>
 #include <boost/asio/posix/stream_descriptor.hpp>
 #include <boost/dll/runtime_symbol_info.hpp>
-
-#include <dlfcn.h>
 
 namespace eosio { namespace wallet {
 
@@ -188,7 +182,7 @@ struct yubihsm_wallet_impl {
          FC_THROW_EXCEPTION(chain::wallet_exception, "Cannot create caps mask");
 
       try {
-         if((rc = yh_util_generate_ec_key(session, &new_key_id, "keosd created key", authkey_domains, &creation_caps, YH_ALGO_EC_P256)))
+         if((rc = yh_util_generate_ec_key(session, &new_key_id, "remvault created key", authkey_domains, &creation_caps, YH_ALGO_EC_P256)))
             FC_THROW_EXCEPTION(chain::wallet_exception, "yh_util_generate_ec_key failed: ${m}", ("m", yh_strerror(rc)));
          return populate_key_map_with_keyid(new_key_id)->first;
       }
@@ -257,11 +251,13 @@ bool yubihsm_wallet::import_key(string wif_key) {
 }
 
 string yubihsm_wallet::create_key(string key_type) {
+   EOS_ASSERT(key_type.empty() || key_type == "R1", chain::unsupported_key_type_exception, "YubiHSM wallet only supports R1 keys");
    return (string)my->create();
 }
 
 bool yubihsm_wallet::remove_key(string key) {
    FC_ASSERT(!is_locked());
+   FC_THROW_EXCEPTION(chain::wallet_exception, "YubiHSM wallet does not currently support removal of keys");
    return true;
 }
 

@@ -16,9 +16,26 @@ import signal
 
 ###############################################################
 # nodeos_forked_chain_test
-# --dump-error-details <Upon error print etc/eosio/node_*/config.ini and var/lib/node_*/stderr.log to stdout>
-# --keep-logs <Don't delete var/lib/node_* folders upon test completion>
+# 
+# This test sets up 2 producing nodes and one "bridge" node using test_control_api_plugin.
+#   One producing node has 11 of the elected producers and the other has 10 of the elected producers.
+#   All the producers are named in alphabetical order, so that the 11 producers, in the one production node, are
+#       scheduled first, followed by the 10 producers in the other producer node. Each producing node is only connected
+#       to the other producing node via the "bridge" node.
+#   The bridge node has the test_control_api_plugin, which exposes a restful interface that the test script uses to kill
+#       the "bridge" node at a specific producer in the production cycle. This is used to fork the producer network
+#       precisely when the 11 producer node has finished producing and the other producing node is about to produce.
+#   The fork in the producer network results in one fork of the block chain that advances with 10 producers with a LIB
+#      that has advanced, since all of the previous blocks were confirmed and the producer that was scheduled for that
+#      slot produced it, and one with 11 producers with a LIB that has not advanced.  This situation is validated by
+#      the test script.
+#   After both chains are allowed to produce, the "bridge" node is turned back on.
+#   Time is allowed to progress so that the "bridge" node can catchup and both producer nodes to come to consensus
+#   The block log is then checked for both producer nodes to verify that the 10 producer fork is selected and that
+#       both nodes are in agreement on the block log.
+#
 ###############################################################
+
 Print=Utils.Print
 
 from core_symbol import CORE_SYMBOL
@@ -135,7 +152,7 @@ killEosInstances=not dontKill
 killWallet=not dontKill
 
 WalletdName=Utils.EosWalletName
-ClientName="cleos"
+ClientName="remcli"
 
 try:
     TestHelper.printSystemInfo("BEGIN")
@@ -215,11 +232,12 @@ try:
     # create accounts via eosio as otherwise a bid is needed
     for account in accounts:
         Print("Create new account %s via %s" % (account.name, cluster.eosioAccount.name))
-        trans=node.createInitializeAccount(account, cluster.eosioAccount, stakedDeposit=0, waitForTransBlock=True, stakeNet=1000, stakeCPU=1000, buyRAM=1000, exitOnError=True)
-        transferAmount="100000000.0000 {0}".format(CORE_SYMBOL)
+        trans=node.createInitializeAccount(account, cluster.eosioAccount, stakedDeposit=0, waitForTransBlock=True, stakeQuantity=40000000.0000, exitOnError=True)
+        transferAmount="60000000.0000 {0}".format(CORE_SYMBOL)
         Print("Transfer funds %s from account %s to %s" % (transferAmount, cluster.eosioAccount.name, account.name))
         node.transferFunds(cluster.eosioAccount, account, transferAmount, "test transfer", waitForTransBlock=True)
-        trans=node.delegatebw(account, 20000000.0000, 20000000.0000, waitForTransBlock=True, exitOnError=True)
+        # trans=node.delegatebw(account, 39999800.0000, waitForTransBlock=True, exitOnError=True)
+        trans=node.regproducer(account, "http::/mysite.com", 0, waitForTransBlock=False, exitOnError=True)
 
 
     # ***   vote using accounts   ***
@@ -249,7 +267,7 @@ try:
         blockProducer=node.getBlockProducerByNum(blockNum)
 
 
-    # ***   Identify what the production cycel is   ***
+    # ***   Identify what the production cycle is   ***
 
     productionCycle=[]
     producerToSlot={}
@@ -302,6 +320,7 @@ try:
     killAtProducer="defproducerk"
     nonProdNode.killNodeOnProducer(producer=killAtProducer, whereInSequence=(inRowCountPerProducer-1))
 
+    cluster.reportStatus()
 
     # ***   Identify a highest block number to check while we are trying to identify where the divergence will occur   ***
 
@@ -360,6 +379,8 @@ try:
         if blockProducer0!=blockProducer1:
             extra="" if transitionCount==0 else " Diverged after expected killAtProducer transition at block %d." % (missedTransitionBlock)
             Utils.errorExit("Groups reported different block producers for block number %d.%s %s != %s." % (blockNum,extra,blockProducer0,blockProducer1))
+
+    cluster.reportStatus()
 
     #verify that the non producing node is not alive (and populate the producer nodes with current getInfo data to report if
     #an error occurs)

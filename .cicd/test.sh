@@ -9,11 +9,10 @@ if [[ $(uname) == 'Darwin' ]]; then # macOS
     ./"$@"
     EXIT_STATUS=$?
 else # Linux
-    COMMANDS="$MOUNTED_DIR/$@"
-    . $HELPERS_DIR/file-hash.sh $CICD_DIR/platforms/$PLATFORM_TYPE/$IMAGE_TAG.dockerfile
-    echo "$ docker run --rm --init -v $(pwd):$MOUNTED_DIR $(buildkite-intrinsics) -e JOBS $FULL_TAG bash -c \"$COMMANDS\""
+    . $HELPERS_DIR/file-hash.sh $CICD_DIR/platforms/$IMAGE_TAG.dockerfile
+    echo "$ docker run --rm --init -v $(pwd):$MOUNTED_DIR $(buildkite-intrinsics) -e JOBS $FULL_TAG bash -c \"$MOUNTED_DIR/$@\""
     set +e # defer error handling to end
-    eval docker run --rm --init -v $(pwd):$MOUNTED_DIR $(buildkite-intrinsics) -e JOBS $FULL_TAG bash -c \"$COMMANDS\"
+    eval docker run --rm --init -v $(pwd):$MOUNTED_DIR $(buildkite-intrinsics) -e JOBS $FULL_TAG bash -c \"$MOUNTED_DIR/$@\"
     EXIT_STATUS=$?
 fi
 # buildkite

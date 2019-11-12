@@ -15,21 +15,54 @@ from sys import exit
 import traceback
 
 ###########################################################################################
+
+def addEnum(enumClassType, type):
+    setattr(enumClassType, type, enumClassType(type))
+
+def unhandledEnumType(type):
+    raise RuntimeError("No case defined for type=%s" % (type.type))
+
+class EnumType:
+
+    def __init__(self, type):
+        self.type=type
+
+    def __str__(self):
+        return self.type
+
+
+class ReturnType(EnumType):
+    pass
+
+addEnum(ReturnType, "raw")
+addEnum(ReturnType, "json")
+
+###########################################################################################
+
+class BlockLogAction(EnumType):
+    pass
+
+addEnum(BlockLogAction, "make_index")
+addEnum(BlockLogAction, "trim")
+addEnum(BlockLogAction, "smoke_test")
+addEnum(BlockLogAction, "return_blocks")
+
+###########################################################################################
 class Utils:
     Debug=False
     FNull = open(os.devnull, 'w')
 
-    EosClientPath="programs/cleos/cleos"
-    MiscEosClientArgs="--no-auto-keosd"
+    EosClientPath="programs/remcli/remcli"
+    MiscEosClientArgs="--no-auto-remvault"
 
-    EosWalletName="keosd"
-    EosWalletPath="programs/keosd/"+ EosWalletName
+    EosWalletName="remvault"
+    EosWalletPath="programs/remvault/"+ EosWalletName
 
-    EosServerName="nodeos"
-    EosServerPath="programs/nodeos/"+ EosServerName
+    EosServerName="remnode"
+    EosServerPath="programs/remnode/"+ EosServerName
 
     EosLauncherPath="programs/eosio-launcher/eosio-launcher"
-    MongoPath="mongo"
+    MongoPath="mongo --quiet"
     ShuttingDown=False
     CheckOutputDeque=deque(maxlen=10)
 
@@ -44,7 +77,9 @@ class Utils:
         stackDepth=len(inspect.stack())-2
         s=' '*stackDepth
         stdout.write(s)
-        print(*args, **kwargs)
+        from inspect import currentframe, getframeinfo
+        frameinfo = getframeinfo(currentframe().f_back)
+        print(frameinfo.filename.replace(os.getcwd() + "/","") + ":" + str(frameinfo.lineno) + ":",*args, **kwargs)
 
     SyncStrategy=namedtuple("ChainSyncStrategy", "name id arg")
 
@@ -144,7 +179,7 @@ class Utils:
         Utils.Print(msg)
 
     @staticmethod
-    def waitForObj(lam, timeout=None, sleepTime=3, reporter=None):
+    def waitForObj(lam, timeout=None, sleepTime=0.1, reporter=None):
         if timeout is None:
             timeout=60
 
@@ -156,7 +191,7 @@ class Utils:
                 if ret is not None:
                     return ret
                 if Utils.Debug:
-                    Utils.Print("cmd: sleep %d seconds, remaining time: %d seconds" %
+                    Utils.Print("cmd: sleep %f seconds, remaining time: %d seconds" %
                                 (sleepTime, endTime - time.time()))
                 else:
                     stdout.write('.')
@@ -172,7 +207,7 @@ class Utils:
         return None
 
     @staticmethod
-    def waitForBool(lam, timeout=None, sleepTime=3, reporter=None):
+    def waitForBool(lam, timeout=None, sleepTime=0.1, reporter=None):
         myLam = lambda: True if lam() else None
         ret=Utils.waitForObj(myLam, timeout, sleepTime, reporter=reporter)
         return False if ret is None else ret
@@ -218,6 +253,11 @@ class Utils:
     @staticmethod
     def runCmdReturnStr(cmd, trace=False):
         cmdArr=shlex.split(cmd)
+        return Utils.runCmdArrReturnStr(cmdArr)
+
+
+    @staticmethod
+    def runCmdArrReturnStr(cmdArr, trace=False):
         retStr=Utils.checkOutput(cmdArr)
         if trace: Utils.Print ("RAW > %s" % (retStr))
         return retStr
@@ -271,14 +311,37 @@ class Utils:
         return "pgrep %s %s" % (pgrepOpts, serverName)
 
     @staticmethod
-    def getBlockLog(blockLogLocation, silentErrors=False, exitOnError=False):
+    def getBlockLog(blockLogLocation, blockLogAction=BlockLogAction.return_blocks, outputFile=None, first=None, last=None, throwException=False, silentErrors=False, exitOnError=False):
         assert(isinstance(blockLogLocation, str))
-        cmd="%s --blocks-dir %s --as-json-array" % (Utils.EosBlockLogPath, blockLogLocation)
+        outputFileStr=" --output-file %s " % (outputFile) if outputFile is not None else ""
+        firstStr=" --first %s " % (first) if first is not None else ""
+        lastStr=" --last %s " % (last) if last is not None else ""
+
+        blockLogActionStr=None
+        returnType=ReturnType.raw
+        if blockLogAction==BlockLogAction.return_blocks:
+            blockLogActionStr=""
+            returnType=ReturnType.json
+        elif blockLogAction==BlockLogAction.make_index:
+            blockLogActionStr=" --make-index "
+        elif blockLogAction==BlockLogAction.trim:
+            blockLogActionStr=" --trim "
+        elif blockLogAction==BlockLogAction.smoke_test:
+            blockLogActionStr=" --smoke-test "
+        else:
+            unhandledEnumType(blockLogAction)
+
+        cmd="%s --blocks-dir %s --as-json-array %s%s%s%s" % (Utils.EosBlockLogPath, blockLogLocation, outputFileStr, firstStr, lastStr, blockLogActionStr)
         if Utils.Debug: Utils.Print("cmd: %s" % (cmd))
         rtn=None
         try:
-            rtn=Utils.runCmdReturnJson(cmd, silentErrors=silentErrors)
+            if returnType==ReturnType.json:
+                rtn=Utils.runCmdReturnJson(cmd, silentErrors=silentErrors)
+            else:
+                rtn=Utils.runCmdReturnStr(cmd)
         except subprocess.CalledProcessError as ex:
+            if throwException:
+                raise
             if not silentErrors:
                 msg=ex.output.decode("utf-8")
                 errorMsg="Exception during \"%s\". %s" % (cmd, msg)
@@ -361,30 +424,15 @@ class Utils:
 class Account(object):
     # pylint: disable=too-few-public-methods
 
-    def __init__(self, name):
+    def __init__(self, name, ownerPrivateKey = None, ownerPublicKey = None, activePrivateKey = None, activePublicKey = None):
         self.name=name
 
-        self.ownerPrivateKey=None
-        self.ownerPublicKey=None
-        self.activePrivateKey=None
-        self.activePublicKey=None
+        self.ownerPrivateKey  = ownerPrivateKey
+        self.ownerPublicKey   = ownerPublicKey
+        self.activePrivateKey = activePrivateKey
+        self.activePublicKey  = activePublicKey
 
 
     def __str__(self):
         return "Name: %s" % (self.name)
 
-###########################################################################################
-
-def addEnum(enumClassType, type):
-    setattr(enumClassType, type, enumClassType(type))
-
-def unhandledEnumType(type):
-    raise RuntimeError("No case defined for type=%s" % (type.type))
-
-class EnumType:
-
-    def __init__(self, type):
-        self.type=type
-
-    def __str__(self):
-        return self.type

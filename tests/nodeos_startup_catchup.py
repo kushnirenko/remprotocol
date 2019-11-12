@@ -17,6 +17,7 @@ import re
 
 ###############################################################
 # nodeos_startup_catchup
+#
 #  Test configures a producing node and <--txn-plugins count> non-producing nodes with the
 #  txn_test_gen_plugin.  Each non-producing node starts generating transactions and sending them
 #  to the producing node.
@@ -26,6 +27,7 @@ import re
 #  4) restart the node
 #  5) the node is allowed to catch up to the producing node
 #  3) Repeat steps 2-5, <--catchup-count - 1> more times
+#
 ###############################################################
 
 Print=Utils.Print
@@ -34,7 +36,7 @@ errorExit=Utils.errorExit
 from core_symbol import CORE_SYMBOL
 
 appArgs=AppArgs()
-extraArgs = appArgs.add(flag="--catchup-count", type=int, help="How many catchup-nodes to launch", default=10)
+extraArgs = appArgs.add(flag="--catchup-count", type=int, help="How many catchup-nodes to launch", default=1)
 extraArgs = appArgs.add(flag="--txn-gen-nodes", type=int, help="How many transaction generator nodes", default=2)
 args = TestHelper.parse_args({"--prod-count","--dump-error-details","--keep-logs","-v","--leave-running","--clean-run",
                               "-p","--wallet-port"}, applicationSpecificArgs=appArgs)
@@ -57,7 +59,7 @@ killEosInstances=not dontKill
 killWallet=not dontKill
 
 WalletdName=Utils.EosWalletName
-ClientName="cleos"
+ClientName="remcli"
 
 try:
     TestHelper.printSystemInfo("BEGIN")
@@ -71,7 +73,7 @@ try:
         specificExtraNodeosArgs[nodeNum]="--plugin eosio::txn_test_gen_plugin --txn-test-gen-account-prefix txntestacct"
     Print("Stand up cluster")
     if cluster.launch(prodCount=prodCount, onlyBios=False, pnodes=pnodes, totalNodes=totalNodes, totalProducers=pnodes*prodCount,
-                      useBiosBootFile=False, specificExtraNodeosArgs=specificExtraNodeosArgs, unstartedNodes=catchupCount, loadSystemContract=False) is False:
+                      useBiosBootFile=False, specificExtraNodeosArgs=specificExtraNodeosArgs, unstartedNodes=catchupCount, loadSystemContract=True) is False:
         Utils.errorExit("Failed to stand up eos cluster.")
 
     Print("Validating system accounts after bootstrap")
@@ -101,8 +103,8 @@ try:
     def waitForNodeStarted(node):
         sleepTime=0
         while sleepTime < 10 and node.getInfo(silentErrors=True) is None:
-            time.sleep(1)
-            sleepTime+=1
+            time.sleep(0.1)
+            sleepTime+=0.1
 
     node0=cluster.getNode(0)
 
@@ -136,17 +138,18 @@ try:
     avg=transactions / (blockNum - startBlockNum + 1)
 
     Print("Validate transactions are generating")
-    minRequiredTransactions=transactionsPerBlock
+    minRequiredTransactions=transactionsPerBlock - 1
     assert avg>minRequiredTransactions, "Expected to at least receive %s transactions per block, but only getting %s" % (minRequiredTransactions, avg)
 
     Print("Cycle through catchup scenarios")
     twoRounds=21*2*12
+    twoRoundsTimeout=(twoRounds/2 + 10)  #2 rounds in seconds + some leeway
     for catchup_num in range(0, catchupCount):
         Print("Start catchup node")
         cluster.launchUnstarted(cachePopen=True)
         lastLibNum=lib(node0)
         # verify producer lib is still advancing
-        waitForBlock(node0, lastLibNum+1, timeout=twoRounds/2, blockType=BlockType.lib)
+        waitForBlock(node0, lastLibNum+1, timeout=twoRoundsTimeout, blockType=BlockType.lib)
 
         catchupNode=cluster.getNodes()[-1]
         catchupNodeNum=cluster.getNodes().index(catchupNode)
@@ -155,11 +158,11 @@ try:
 
         Print("Verify catchup node %s's LIB is advancing" % (catchupNodeNum))
         # verify lib is advancing (before we wait for it to have to catchup with producer)
-        waitForBlock(catchupNode, lastCatchupLibNum+1, timeout=twoRounds/2, blockType=BlockType.lib)
+        waitForBlock(catchupNode, lastCatchupLibNum+1, timeout=twoRoundsTimeout, blockType=BlockType.lib)
 
         Print("Verify catchup node is advancing to producer")
         numBlocksToCatchup=(lastLibNum-lastCatchupLibNum-1)+twoRounds
-        waitForBlock(catchupNode, lastLibNum, timeout=(numBlocksToCatchup)/2, blockType=BlockType.lib)
+        waitForBlock(catchupNode, lastLibNum, timeout=twoRoundsTimeout, blockType=BlockType.lib)
 
         Print("Shutdown catchup node and validate exit code")
         catchupNode.interruptAndVerifyExitStatus(60)
@@ -171,16 +174,16 @@ try:
 
         Print("Verify catchup node is advancing")
         # verify catchup node is advancing to producer
-        waitForBlock(catchupNode, lastCatchupLibNum+1, timeout=twoRounds/2, blockType=BlockType.lib)
+        waitForBlock(catchupNode, lastCatchupLibNum+1, timeout=twoRoundsTimeout, blockType=BlockType.lib)
 
         Print("Verify producer is still advancing LIB")
         lastLibNum=lib(node0)
         # verify producer lib is still advancing
-        node0.waitForBlock(lastLibNum+1, timeout=twoRounds/2, blockType=BlockType.lib)
+        node0.waitForBlock(lastLibNum+1, timeout=twoRoundsTimeout, blockType=BlockType.lib)
 
         Print("Verify catchup node is advancing to producer")
         # verify catchup node is advancing to producer
-        waitForBlock(catchupNode, lastLibNum, timeout=(numBlocksToCatchup)/2, blockType=BlockType.lib)
+        waitForBlock(catchupNode, lastLibNum, timeout=(numBlocksToCatchup/2 + 60), blockType=BlockType.lib)
         catchupNode.interruptAndVerifyExitStatus(60)
         catchupNode.popenProc=None
 

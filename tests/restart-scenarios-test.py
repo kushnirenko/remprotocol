@@ -8,18 +8,12 @@ from TestHelper import TestHelper
 import random
 
 ###############################################################
-# Test for different nodes restart scenarios.
-# Nodes can be producing or non-producing.
-# -p <producing nodes count>
-# -c <chain strategy[replay|resync|none]>
-# -s <topology>
-# -d <delay between nodes startup>
-# -v <verbose logging>
-# --kill-sig <kill signal [term|kill]>
-# --kill-count <nodeos instances to kill>
-# --dont-kill <Leave cluster running after test finishes>
-# --dump-error-details <Upon error print etc/eosio/node_*/config.ini and var/lib/node_*/stderr.log to stdout>
-# --keep-logs <Don't delete var/lib/node_* folders upon test completion>
+# restart-scenarios-test
+#
+# Tests restart scenarios for remnode.  Uses "-c" flag to indicate "replay" (--replay-blockchain), "resync"
+# (--delete-all-blocks), "hardReplay"(--hard-replay-blockchain), and "none" to indicate what kind of restart flag should
+# be used. This is one of the only test that actually verify that remnode terminates with a good exit status.
+#
 ###############################################################
 
 
@@ -73,7 +67,7 @@ try:
     if not cluster.waitOnClusterBlockNumSync(3):
         errorExit("Cluster never stabilized")
 
-    Print("Stand up EOS wallet keosd")
+    Print("Stand up EOS wallet remvault")
     accountsCount=total_nodes
     walletName="MyWallet"
     Print("Creating wallet %s if one doesn't already exist." % walletName)
@@ -101,7 +95,7 @@ try:
     Print("Kill %d cluster node instances." % (killCount))
     if cluster.killSomeEosInstances(killCount, killSignal) is False:
         errorExit("Failed to kill Eos instances")
-    Print("nodeos instances killed.")
+    Print("remnode instances killed.")
 
     Print("Spread funds and validate")
     if not cluster.spreadFundsAndValidate(10):
@@ -114,7 +108,7 @@ try:
     Print ("Relaunch dead cluster nodes instances.")
     if cluster.relaunchEosInstances(cachePopen=True) is False:
         errorExit("Failed to relaunch Eos instances")
-    Print("nodeos instances relaunched.")
+    Print("remnode instances relaunched.")
 
     Print ("Resyncing cluster nodes.")
     if not cluster.waitOnClusterSync():
@@ -135,7 +129,7 @@ try:
             if node.popenProc is not None:
                 atLeastOne=True
                 node.interruptAndVerifyExitStatus()
-        assert atLeastOne, "Test is setup to verify that a cleanly interrupted nodeos exits with an exit status of 0, but this test may no longer be setup to do that"
+        assert atLeastOne, "Test is setup to verify that a cleanly interrupted remnode exits with an exit status of 0, but this test may no longer be setup to do that"
 
     testSuccessful=True
 finally:
