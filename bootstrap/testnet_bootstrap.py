@@ -205,7 +205,7 @@ def vote_producers():
 
 
 if __name__ == '__main__':
-    init_supply_to_rem_acc()
+    issue_supply_to_rem_acc()
     create_tech_accounts()
     create_producer_accounts()
     import_producer_keys()
