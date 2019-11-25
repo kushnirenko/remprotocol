@@ -56,6 +56,9 @@ swap_chains = [
     ('ethropsten', '1', '1')
 ]
 
+eth_swap_contract_address = '0x39882AB5105b1D627E6AED3FF39c1B004a18E207'
+eth_chain_id = 'ethropsten'
+
 
 def get_chain_id():
     url = f'http://127.0.0.1:{remnode_port}/v1/chain/get_info'
@@ -148,11 +151,16 @@ def bootstrap_system_contracts():
     run(remcli + 'push action rem.oracle addpair \'["rem.btc"]\' -p rem.oracle -p rem')
     run(remcli + 'push action rem.oracle addpair \'["rem.eth"]\' -p rem.oracle -p rem')
 
-    run(remcli + f'push action rem.swap setswapfee \'["{producer_reward_per_swap}"]\' \
+    # run(remcli + f'push action rem.swap setswapfee \'["{producer_reward_per_swap}"]\' \
+    # -p rem.swap -p rem')
+    # run(remcli + f'push action rem.swap setchainid \'["{get_chain_id()}"]\' \
+    # -p rem.swap -p rem')
+
+    run(remcli + f'push action rem.swap setswapparam \'["{producer_reward_per_swap}", "{get_chain_id()}", \
+    "{eth_swap_contract_address}", "{eth_chain_id}"]\' \
     -p rem.swap -p rem')
-    run(remcli + f'push action rem.swap setminswpout \'["{min_swap_out_amount}"]\' \
-    -p rem.swap -p rem')
-    run(remcli + f'push action rem.swap setchainid \'["{get_chain_id()}"]\' \
+
+    run(remcli + f'push action rem.swap setminswpout \'["{eth_chain_id}", "{min_swap_out_amount}"]\' \
     -p rem.swap -p rem')
     for chain_id, input, output, in swap_chains:
         run(remcli + f'push action rem.swap addchain \'["{chain_id}", "{input}", "{output}"]\' \

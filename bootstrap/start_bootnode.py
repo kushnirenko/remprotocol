@@ -54,7 +54,6 @@ def start_node(nodeIndex, accounts):
     swap_and_oracle_opts = (
         '    --plugin eosio::eth_swap_plugin'
         '    --plugin eosio::rem_oracle_plugin'
-        '    --eth_swap_contract_address 0x39882AB5105b1D627E6AED3FF39c1B004a18E207'
     )
     if cryptocompare_apikey:
         swap_and_oracle_opts += (
