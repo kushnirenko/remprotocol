@@ -317,7 +317,8 @@ void eth_swap_plugin::plugin_initialize(const variables_map& options) {
           //ilog("counter: ${i}", ("i", i++));
         }
       } FC_LOG_AND_DROP()
-
+      ilog("eth swap contract address: ${i}", ("i", eth_swap_contract_address));
+      ilog("eth return chain id: ${i}", ("i", return_chain_id));
 
       eth_events_window_length = options.at( "eth_events_window_length" ).as<uint32_t>();
       blocks_per_filter = options.at( "blocks_per_filter" ).as<uint32_t>();
