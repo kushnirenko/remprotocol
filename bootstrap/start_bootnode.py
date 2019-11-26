@@ -1,7 +1,7 @@
 import os
 import subprocess
 
-from mainnet_bootstrap import run, remcli, public_key
+from mainnet_bootstrap import run, remcli, public_key, eth_swap_contract_address, eth_chain_id
 from time import sleep
 
 wallet_dir = './wallet/'
@@ -61,7 +61,9 @@ def start_node(nodeIndex, accounts):
         )
     if eth_wss_provider:
         swap_and_oracle_opts += (
-                '    --eth-wss-provider ' + eth_wss_provider
+                '    --eth-wss-provider ' + eth_wss_provider +
+                '    --eth_swap_contract_address ' + eth_swap_contract_address +
+                '    --return_chain_id ' + eth_chain_id
         )
     cmd = (
             remnode +
