@@ -80,6 +80,7 @@ std::string return_chain_id;  // return chain identifier if case of swap cancell
 uint32_t request_swap_hex_data_length = 512;  // payload length of request swap event in hex symbols
 
 uint32_t wait_for_eth_node = 20;  // amount of seconds to sleep before reconnection if connection to ethereum node closes
+uint32_t wait_for_swapparams = 20; // amount of seconds to sleep before retrying to retrive eth smart contract from remprotocol
 
 /*
   amount of last blocks in ethereum to get request swap events

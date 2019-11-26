@@ -61,9 +61,7 @@ def start_node(nodeIndex, accounts):
         )
     if eth_wss_provider:
         swap_and_oracle_opts += (
-                '    --eth-wss-provider ' + eth_wss_provider +
-                '    --eth_swap_contract_address ' + eth_swap_contract_address +
-                '    --return_chain_id ' + eth_chain_id
+                '    --eth-wss-provider ' + eth_wss_provider
         )
     cmd = (
             remnode +

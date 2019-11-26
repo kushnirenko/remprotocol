@@ -52,6 +52,33 @@ class eth_swap_plugin_impl {
     uint64_t                   _last_processed_block;
 
     void start_monitor() {
+
+      while(eth_swap_contract_address.empty() && return_chain_id.empty()) {
+        //uint32_t i = 0;
+        try {
+          chain_apis::read_only::get_table_rows_params params = {};
+          params.json = true;
+          params.code = N(rem.swap);
+          params.scope = std::string("rem.swap");
+          params.table = N(swapparams);
+
+          chain_apis::read_only::get_table_rows_result result = app().get_plugin<chain_plugin>().get_read_only_api().get_table_rows(params);
+          for( const auto& item : result.rows ) {
+            eth_swap_contract_address = item["eth_swap_contract_address"].as<std::string>();
+            return_chain_id = item["eth_return_chainid"].as<std::string>();
+            //try {ilog("in_swap_fee: ${i}", ("i", item["in_swap_fee"]));} FC_LOG_AND_DROP()
+            //try {ilog("out_swap_min_amount: ${i}", ("i", item["out_swap_min_amount"]));} FC_LOG_AND_DROP()
+            //try {ilog("chain_id: ${i}", ("i", item["chain_id"]));} FC_LOG_AND_DROP()
+            //ilog("counter: ${i}", ("i", i++));
+          }
+        } FC_LOG_AND_DROP()
+        if( eth_swap_contract_address.empty() && return_chain_id.empty() )
+          sleep(wait_for_swapparams);
+      }
+      ilog("eth swap contract address: ${i}", ("i", eth_swap_contract_address));
+      ilog("eth return chain id: ${i}", ("i", return_chain_id));
+
+
       while (true) {
           try {
               ilog("Establishing connection with ${address}...", ("address", this->_eth_wss_provider));
@@ -256,9 +283,9 @@ void eth_swap_plugin::set_program_options(options_description&, options_descript
         ("swap-signing-key", bpo::value<std::vector<std::string>>(),
          "A private key to sign init swap actions")
 
-         ("eth_swap_contract_address", bpo::value<std::string>(), "")
+         //("eth_swap_contract_address", bpo::value<std::string>(), "")
          ("eth_swap_request_event", bpo::value<std::string>()->default_value(eth_swap_request_event), "")
-         ("return_chain_id", bpo::value<std::string>(), "")
+         //("return_chain_id", bpo::value<std::string>(), "")
 
          ("eth_events_window_length", bpo::value<uint32_t>()->default_value(eth_events_window_length), "")
          ("blocks_per_filter", bpo::value<uint32_t>()->default_value(blocks_per_filter), "")
@@ -298,36 +325,6 @@ void eth_swap_plugin::plugin_initialize(const variables_map& options) {
       //eth_swap_contract_address = options.at( "eth_swap_contract_address" ).as<std::string>();
       eth_swap_request_event    = options.at( "eth_swap_request_event" ).as<std::string>();
       //return_chain_id           = options.at( "return_chain_id" ).as<std::string>();
-
-      //uint32_t i = 0;
-      try {
-        chain_apis::read_only::get_table_rows_params params = {};
-        params.json = true;
-        params.code = N(rem.swap);
-        params.scope = std::string("rem.swap");
-        params.table = N(swapparams);
-
-        chain_apis::read_only::get_table_rows_result result = app().get_plugin<chain_plugin>().get_read_only_api().get_table_rows(params);
-        for( const auto& item : result.rows ) {
-          eth_swap_contract_address = item["eth_swap_contract_address"].as<std::string>();
-          return_chain_id = item["eth_return_chainid"].as<std::string>();
-          //try {ilog("in_swap_fee: ${i}", ("i", item["in_swap_fee"]));} FC_LOG_AND_DROP()
-          //try {ilog("out_swap_min_amount: ${i}", ("i", item["out_swap_min_amount"]));} FC_LOG_AND_DROP()
-          //try {ilog("chain_id: ${i}", ("i", item["chain_id"]));} FC_LOG_AND_DROP()
-          //ilog("counter: ${i}", ("i", i++));
-        }
-      } FC_LOG_AND_DROP()
-
-      ilog("eth swap contract address: ${i}", ("i", eth_swap_contract_address));
-      ilog("eth return chain id: ${i}", ("i", return_chain_id));
-
-      if( eth_swap_contract_address.empty() )
-        eth_swap_contract_address = options.at( "eth_swap_contract_address" ).as<std::string>();
-      if( return_chain_id.empty() )
-        return_chain_id           = options.at( "return_chain_id" ).as<std::string>();
-
-      ilog("eth swap contract address: ${i}", ("i", eth_swap_contract_address));
-      ilog("eth return chain id: ${i}", ("i", return_chain_id));
 
       eth_events_window_length = options.at( "eth_events_window_length" ).as<uint32_t>();
       blocks_per_filter = options.at( "blocks_per_filter" ).as<uint32_t>();
