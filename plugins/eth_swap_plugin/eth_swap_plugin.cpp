@@ -256,9 +256,9 @@ void eth_swap_plugin::set_program_options(options_description&, options_descript
         ("swap-signing-key", bpo::value<std::vector<std::string>>(),
          "A private key to sign init swap actions")
 
-         ("eth_swap_contract_address", bpo::value<std::string>()->default_value(eth_swap_contract_address), "")
+         ("eth_swap_contract_address", bpo::value<std::string>(), "")
          ("eth_swap_request_event", bpo::value<std::string>()->default_value(eth_swap_request_event), "")
-         ("return_chain_id", bpo::value<std::string>()->default_value(return_chain_id), "")
+         ("return_chain_id", bpo::value<std::string>(), "")
 
          ("eth_events_window_length", bpo::value<uint32_t>()->default_value(eth_events_window_length), "")
          ("blocks_per_filter", bpo::value<uint32_t>()->default_value(blocks_per_filter), "")
@@ -317,6 +317,9 @@ void eth_swap_plugin::plugin_initialize(const variables_map& options) {
           //ilog("counter: ${i}", ("i", i++));
         }
       } FC_LOG_AND_DROP()
+
+      ilog("eth swap contract address: ${i}", ("i", eth_swap_contract_address));
+      ilog("eth return chain id: ${i}", ("i", return_chain_id));
 
       if( eth_swap_contract_address.empty() )
         eth_swap_contract_address = options.at( "eth_swap_contract_address" ).as<std::string>();
