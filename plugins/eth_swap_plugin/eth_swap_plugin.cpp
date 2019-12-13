@@ -277,7 +277,7 @@ eth_swap_plugin::~eth_swap_plugin(){}
 void eth_swap_plugin::set_program_options(options_description&, options_description& cfg) {
   cfg.add_options()
         ("eth-wss-provider", bpo::value<std::string>(),
-         "Ethereum websocket provider. For example wss://ropsten.infura.io/ws/v3/<infura_id>")
+         "Ethereum websocket provider. For example wss://mainnet.infura.io/ws/v3/<infura_id>")
         ("swap-authority", bpo::value<std::vector<std::string>>(),
          "Account name and permission to authorize init swap actions. For example blockproducer1@active")
         ("swap-signing-key", bpo::value<std::vector<std::string>>(),
@@ -340,7 +340,7 @@ void eth_swap_plugin::plugin_initialize(const variables_map& options) {
 }
 
 void eth_swap_plugin::plugin_startup() {
-  ilog("Ethropsten swap plugin started");
+  ilog("Ethereum swap plugin started");
   // struct get_table_rows_params {
   //    bool        json = false;
   //    name        code;
