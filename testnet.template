@@ -25,9 +25,9 @@ if [ -z "$bioscontractpath" ]; then
     bioscontractpath="contracts/contracts/$bioscontractname"
 fi
 
-bioscurrencysymbol=$BIOS_CURRENCY_SYMBOL
+bioscurrencysymbol=$CORE_SYMBOL
 if [ -z "$bioscurrencysymbol" ]; then
-    bioscurrencysymbol="SYS"
+    bioscurrencysymbol="REM"
 fi
 
 wddir=eosio-ignition-wd
