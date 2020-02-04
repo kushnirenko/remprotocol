@@ -161,10 +161,10 @@ namespace eosiosystem {
    }
 
    uint64_t system_contract::get_min_account_stake() {
-      eosio::remprice_idx remprice_table(oracle_account, oracle_account.value);
+      remoracle::remprice_idx remprice_table(oracle_account, oracle_account.value);
       auto rem_usd_it = remprice_table.find(rem_usd_pair.value);
-      auto setprice_window_m = eosio::seconds(eosio::setprice_window + eosio::setprice_window * 0.2);
-      bool is_valid_price = ( rem_usd_it != remprice_table.end() ) && ( (current_time_point() - rem_usd_it->last_update.to_time_point()) <= setprice_window_m );
+      auto setprice_window = eosio::seconds(remoracle::setprice_window_seconds + remoracle::setprice_window_seconds * 0.2);
+      bool is_valid_price = ( rem_usd_it != remprice_table.end() ) && ( (current_time_point() - rem_usd_it->last_update.to_time_point()) <= setprice_window );
       uint64_t oracle_min_account_stake = min_account_price / rem_usd_it->price;
 
       if ( is_valid_price && oracle_min_account_stake > 0 ) {
